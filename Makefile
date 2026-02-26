@@ -27,22 +27,26 @@ BUILD_DIR = build
 BIN_DIR = bin
 
 # Source files
-MARROW_9P_SRCS = $(SRC_DIR)/9p/protocol.c $(SRC_DIR)/9p/ops.c $(SRC_DIR)/9p/tree.c \
-                 $(SRC_DIR)/9p/drawconn_stub.c
+MARROW_9P_SRCS = $(SRC_DIR)/9p/protocol.c $(SRC_DIR)/9p/ops.c $(SRC_DIR)/9p/tree.c
+MARROW_GRAPHICS_SRCS = $(SRC_DIR)/graphics/memdraw.c $(SRC_DIR)/graphics/memimage.c \
+                       $(SRC_DIR)/graphics/pixconv.c
 MARROW_AUTH_SRCS = $(SRC_DIR)/auth/dp9ik.c $(SRC_DIR)/auth/p9any.c \
                    $(SRC_DIR)/auth/session.c $(SRC_DIR)/auth/factotum.c \
                    $(SRC_DIR)/auth/keys.c $(SRC_DIR)/auth/secstore.c \
                    $(SRC_DIR)/auth/p9sk1.c
 MARROW_REGISTRY_SRCS = $(SRC_DIR)/registry/cpu.c $(SRC_DIR)/registry/rcpu.c \
-                       $(SRC_DIR)/registry/namespace.c
-MARROW_SYS_SRCS = sys/console.c sys/fd.c sys/proc.c sys/env.c
+                       $(SRC_DIR)/registry/namespace.c $(SRC_DIR)/registry/service.c \
+                       $(SRC_DIR)/registry/discovery.c $(SRC_DIR)/registry/mount.c
+MARROW_SYS_SRCS = sys/console.c sys/fd.c sys/proc.c sys/env.c sys/svc.c \
+                  sys/devdraw.c sys/devscreen.c sys/devmouse.c sys/devkbd.c
 MARROW_PLATFORM_SRCS = $(SRC_DIR)/platform/socket.c
 
-MARROW_SRCS = $(MARROW_9P_SRCS) $(MARROW_AUTH_SRCS) $(MARROW_REGISTRY_SRCS) \
+MARROW_SRCS = $(MARROW_9P_SRCS) $(MARROW_GRAPHICS_SRCS) $(MARROW_AUTH_SRCS) $(MARROW_REGISTRY_SRCS) \
               $(MARROW_SYS_SRCS) $(MARROW_PLATFORM_SRCS)
 
 # Object files
 MARROW_OBJS = $(MARROW_9P_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
+              $(MARROW_GRAPHICS_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
               $(MARROW_AUTH_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
               $(MARROW_REGISTRY_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
               $(MARROW_SYS_SRCS:sys/%.c=$(BUILD_DIR)/sys/%.o) \
@@ -59,6 +63,7 @@ all: $(SERVER_TARGET)
 # Create directories
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)/9p
+	mkdir -p $(BUILD_DIR)/graphics
 	mkdir -p $(BUILD_DIR)/auth
 	mkdir -p $(BUILD_DIR)/registry
 	mkdir -p $(BUILD_DIR)/platform

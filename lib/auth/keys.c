@@ -6,6 +6,7 @@
 #include "devfactotum.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "compat.h"
 #include <string.h>
 #include <ctype.h>
 

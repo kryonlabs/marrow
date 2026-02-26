@@ -262,4 +262,43 @@ size_t handle_tstat(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
  */
 size_t dispatch_9p(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
 
+/*
+ * Include graphics header for DrawConnection and related types
+ */
+#include "graphics.h"
+
+/*
+ * /dev/draw/new implementation
+ */
+int devdraw_new_init(P9Node *draw_dir);
+ssize_t devdraw_new_read(char *buf, size_t count, uint64_t offset, void *data);
+
+/*
+ * /dev/draw/[n]/directory creation
+ */
+P9Node *drawconn_create_dir(int conn_id);
+
+/*
+ * /dev/draw/[n]/data implementation
+ */
+ssize_t devdraw_data_read(char *buf, size_t count, uint64_t offset, void *data);
+ssize_t devdraw_data_write(const char *buf, size_t count, uint64_t offset, void *data);
+
+/*
+ * /dev/draw/[n]/ctl implementation
+ */
+ssize_t devdraw_ctl_read(char *buf, size_t count, uint64_t offset, void *data);
+ssize_t devdraw_ctl_write(const char *buf, size_t count, uint64_t offset, void *data);
+
+/*
+ * /dev/draw/[n]/refresh implementation
+ */
+ssize_t devdraw_refresh_read(char *buf, size_t count, uint64_t offset, void *data);
+
+/*
+ * Plan 9 graphics protocol processing
+ */
+int process_draw_messages(DrawConnection *conn, const char *buf, size_t count,
+                          char *response, int *resp_len);
+
 #endif /* LIB9P_H */

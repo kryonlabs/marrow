@@ -9,6 +9,7 @@
 #include "lib9p.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "compat.h"
 #include <string.h>
 #include <time.h>
 
@@ -99,23 +100,21 @@ ssize_t factotum_ctl_read(char *buf, size_t count, uint64_t offset)
     static int key_buf_len = 0;
     static int key_buf_initialized = 0;
 
+    /* Get global key list from factotum_keys.c */
+    extern FactotumKey *g_keys;
+
+    FactotumKey *key;
+    FactotumAttr *attr;
+    char tmp[256];
+    int len;
+
     /* Build key list on first call */
     if (!key_buf_initialized) {
-        FactotumKey *key;
-        FactotumAttr *attr;
-        char tmp[256];
-        int proto;
-
         key_buf[0] = '\0';
         key_buf_len = 0;
 
-        /* Get global key list from factotum_keys.c */
-        extern FactotumKey *g_keys;
-
         key = g_keys;
         while (key != NULL && key_buf_len < (int)sizeof(key_buf) - 1) {
-            int len;
-
             len = snprintf(tmp, sizeof(tmp), "key");
 
             /* Write public attributes */

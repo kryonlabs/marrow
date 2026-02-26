@@ -132,7 +132,7 @@ enum {
     SECSTORE_QID_ROOT = 100,
     SECSTORE_QID_STORE_DIR,
     SECSTORE_QID_USER_BASE,  /* + user_id */
-    SECSTORE_QID_LOG,
+    SECSTORE_QID_LOG
 };
 
 /*

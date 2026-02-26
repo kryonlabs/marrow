@@ -50,7 +50,7 @@ enum {
     AUTH_TS = 64,      /* Ticket with server key */
     AUTH_TC = 65,      /* Ticket with client key */
     AUTH_AS = 66,      /* Server authenticator */
-    AUTH_AC = 67,      /* Client authenticator */
+    AUTH_AC = 67       /* Client authenticator */
 };
 
 /*
@@ -62,7 +62,7 @@ enum {
     FACTOTUM_QID_CTL,
     FACTOTUM_QID_RPC,
     FACTOTUM_QID_PROTO,
-    FACTOTUM_QID_LOG,
+    FACTOTUM_QID_LOG
 };
 
 /*
@@ -92,7 +92,7 @@ typedef enum {
     PROTO_RSA,         /* RSA */
     PROTO_ECDSA,       /* ECDSA */
     PROTO_TOTP,        /* TOTP */
-    PROTO_WPAPSK,      /* WPA PSK */
+    PROTO_WPAPSK       /* WPA PSK */
 } ProtoType;
 
 /*

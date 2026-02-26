@@ -68,11 +68,12 @@ void p9sk1_des_set_parity(unsigned char *key, size_t len)
 {
     size_t i, j;
     unsigned char b;
+    unsigned int bitcount;
 
     for (i = 0; i < len; i++) {
         b = key[i];
         /* Count bits in high 7 bits */
-        unsigned int bitcount = 0;
+        bitcount = 0;
         for (j = 0; j < 7; j++) {
             if (b & (1 << j)) {
                 bitcount++;

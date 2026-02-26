@@ -7,6 +7,8 @@
  */
 
 #include "lib9p.h"
+#include "libregistry.h"
+#include "graphics.h"
 #include "../include/auth_dp9ik.h"
 #include "../include/auth_p9any.h"
 #include "../include/devfactotum.h"
@@ -31,6 +33,14 @@ extern int devcons_init(P9Node *dev_dir);
 extern int devfd_init(P9Node *dev_dir);
 extern int devproc_init(P9Node *root);
 extern int devenv_init(P9Node *root);
+extern int devscreen_init(P9Node *dev_dir, Memimage *screen);
+extern int devmouse_init(P9Node *dev_dir);
+extern int devkbd_init(P9Node *dev_dir);
+extern int devdraw_new_init(P9Node *draw_dir);
+extern int drawconn_init(Memimage *screen);
+extern void drawconn_cleanup(void);
+extern void devscreen_cleanup(void);
+extern int svc_init(P9Node *root);
 
 /*
  * Authentication initialization functions (external)
@@ -473,6 +483,11 @@ int main(int argc, char **argv)
     }
 #endif
 
+    /* Initialize service registry */
+    if (service_registry_init() < 0) {
+        fprintf(stderr, "Warning: failed to initialize service registry\n");
+    }
+
     /* Create /dev directory */
     dev_dir = tree_create_dir(root, "dev");
     if (dev_dir == NULL) {
@@ -497,6 +512,57 @@ int main(int argc, char **argv)
         fprintf(stderr, "Warning: failed to initialize /env\n");
     }
 
+    /* Initialize graphics - create screen buffer */
+    {
+        Rectangle screen_rect;
+        Memimage *screen;
+
+        screen_rect = Rect(0, 0, 800, 600);
+        screen = memimage_alloc(screen_rect, RGBA32);
+        if (screen == NULL) {
+            fprintf(stderr, "Error: failed to allocate screen\n");
+            return 1;
+        }
+
+        /* Clear screen to white */
+        memfillcolor(screen, 0xFFFFFFFF);
+
+        /* Initialize draw connection system */
+        if (drawconn_init(screen) < 0) {
+            fprintf(stderr, "Warning: failed to initialize draw connection system\n");
+        }
+
+        fprintf(stderr, "  Created %dx%d RGBA32 screen\n",
+                Dx(screen_rect), Dy(screen_rect));
+    }
+
+    /* Create /dev/draw directory */
+    {
+        P9Node *draw_dir;
+        draw_dir = tree_create_dir(dev_dir, "draw");
+        if (draw_dir == NULL) {
+            fprintf(stderr, "Warning: failed to create draw directory\n");
+        } else {
+            /* Initialize /dev/draw/new */
+            if (devdraw_new_init(draw_dir) < 0) {
+                fprintf(stderr, "Warning: failed to initialize /dev/draw/new\n");
+            }
+        }
+    }
+
+    /* Initialize graphics devices */
+    if (devscreen_init(dev_dir, NULL) < 0) {
+        fprintf(stderr, "Warning: failed to initialize /dev/screen\n");
+    }
+
+    if (devmouse_init(dev_dir) < 0) {
+        fprintf(stderr, "Warning: failed to initialize /dev/mouse\n");
+    }
+
+    if (devkbd_init(dev_dir) < 0) {
+        fprintf(stderr, "Warning: failed to initialize /dev/kbd\n");
+    }
+
     /* Create /mnt directory for service mounting */
     {
         P9Node *mnt_node;
@@ -509,6 +575,11 @@ int main(int argc, char **argv)
             }
         }
         fprintf(stderr, "Created /mnt for service mounting\n");
+    }
+
+    /* Initialize /svc filesystem for service registry */
+    if (svc_init(root) < 0) {
+        fprintf(stderr, "Warning: failed to initialize /svc filesystem\n");
     }
 
     /* Start listening */
@@ -662,6 +733,13 @@ int main(int argc, char **argv)
 
     /* Cleanup authentication sessions */
     auth_session_cleanup();
+
+    /* Cleanup service registry */
+    service_registry_cleanup();
+
+    /* Cleanup device states before tree cleanup */
+    drawconn_cleanup();
+    devscreen_cleanup();
 
     tcp_close(listen_fd);
 

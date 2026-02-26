@@ -218,6 +218,8 @@ size_t handle_tattach(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
             return p9_build_rerror(out_buf, hdr.tag, "CPU session failed");
         }
     }
+#else
+    (void)is_cpu_attach;  /* Suppress unused warning when INCLUDE_CPU_SERVER is not defined */
 #endif
 
     /* Get root node */
@@ -278,6 +280,15 @@ size_t handle_twalk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
     P9Node *node, *newnode;
     P9Qid wqid[P9_MAX_WELEM];
     int i;
+    int j;
+    int k;
+    char temp_name[16];
+    int conn_id;
+    P9Node *dynamic_node;
+    int already_exists;
+    int is_numeric;
+    int found;
+    size_t name_len;
 
     /* Parse request */
     if (p9_parse_header(in_buf, in_len, &hdr) < 0) {
@@ -301,8 +312,8 @@ size_t handle_twalk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
     newnode = node;
     for (i = 0; i < nwname; i++) {
         /* Get string length from buffer (stored 2 bytes before string) */
-        uint16_t name_len = le_get16((uint8_t*)(wnames[i] - 2));
-        int found = 0;
+        name_len = le_get16((uint8_t*)(wnames[i] - 2));
+        found = 0;
 
         /* "." means current directory */
         if (name_len == 1 && wnames[i][0] == '.') {
@@ -319,8 +330,7 @@ size_t handle_twalk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
         /* Check for dynamic /dev/draw/[n] directories */
         else if (newnode->name != NULL && strcmp(newnode->name, "draw") == 0) {
             /* Check if name is all digits */
-            int is_numeric = 1;
-            int j;
+            is_numeric = 1;
             for (j = 0; j < name_len && j < 16; j++) {
                 if (wnames[i][j] < '0' || wnames[i][j] > '9') {
                     is_numeric = 0;
@@ -328,15 +338,13 @@ size_t handle_twalk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
                 }
             }
             if (is_numeric && name_len > 0 && name_len < 16) {
-                char temp_name[16];
                 memcpy(temp_name, wnames[i], name_len);
                 temp_name[name_len] = '\0';
-                int conn_id = atoi(temp_name);
-                P9Node *dynamic_node = drawconn_create_dir(conn_id);
+                conn_id = atoi(temp_name);
+                dynamic_node = drawconn_create_dir(conn_id);
                 if (dynamic_node != NULL) {
                     /* Add to children if not already present */
-                    int already_exists = 0;
-                    int k;
+                    already_exists = 0;
                     for (k = 0; k < newnode->nchildren; k++) {
                         if (newnode->children[k] != NULL &&
                             strlen(newnode->children[k]->name) == name_len &&
@@ -456,6 +464,8 @@ static size_t handle_directory_read(P9Fid *fid_obj, uint64_t offset, uint32_t co
     int i;
     P9Stat stat;
     size_t stat_size;
+    uint64_t bytes_serialized;
+    P9Node *child;
 
     /* Check if node has children */
     if (dir_node->children == NULL || dir_node->nchildren == 0) {
@@ -464,10 +474,9 @@ static size_t handle_directory_read(P9Fid *fid_obj, uint64_t offset, uint32_t co
     }
 
     /* Build stat for each child, tracking byte offset for pagination */
-    uint64_t bytes_serialized = 0;
+    bytes_serialized = 0;
 
     for (i = 0; i < dir_node->nchildren; i++) {
-        P9Node *child;
 
         /* Safety check */
         if (dir_node->children == NULL || i >= dir_node->nchildren) {

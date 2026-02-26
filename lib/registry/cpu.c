@@ -6,6 +6,7 @@
 #include "lib9p.h"
 #include "cpu_server.h"
 #include <stdlib.h>
+#include "compat.h"
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>

@@ -1,0 +1,80 @@
+#ifndef LIBREGISTRY_H
+#define LIBREGISTRY_H
+
+#include "lib9p.h"
+
+/*
+ * Service Registry API
+ * Allows external services (like kryon) to register with marrow
+ */
+
+/* Constants */
+#define MAX_SERVICES 64
+#define MAX_SERVICE_NAME 64
+#define MAX_SERVICE_TYPE 32
+#define MAX_MOUNTS 128
+#define MAX_MOUNT_PATH 256
+
+/*
+ * Service information structure
+ */
+typedef struct ServiceInfo {
+    char *name;
+    char *type;
+    P9Node *tree;
+    time_t registered;
+    int client_fd;
+} ServiceInfo;
+
+/*
+ * Internal registry entries
+ */
+typedef struct ServiceEntry {
+    char name[MAX_SERVICE_NAME];
+    char type[MAX_SERVICE_TYPE];
+    P9Node *tree;
+    time_t registered;
+    int client_fd;
+    int active;
+    struct ServiceEntry *next;
+} ServiceEntry;
+
+typedef struct MountEntry {
+    char path[MAX_MOUNT_PATH];
+    P9Node *tree;
+    int service_fd;
+    struct MountEntry *next;
+} MountEntry;
+
+typedef struct ServiceRegistry {
+    ServiceEntry *services;
+    MountEntry *mounts;
+    int num_services;
+    int num_mounts;
+} ServiceRegistry;
+
+/* Registry initialization */
+int service_registry_init(void);
+void service_registry_cleanup(void);
+
+/* Service registration */
+int service_register(const char *name, const char *type, P9Node *tree);
+int service_unregister(const char *name);
+
+/* Service discovery */
+char **service_discover(const char *type, int *count);
+void service_discover_free(char **names, int count);
+
+/* Service information */
+ServiceInfo *service_get(const char *name);
+void service_free_info(ServiceInfo *info);
+int service_list(ServiceInfo **services, int *count);
+
+/* Namespace mounting */
+int namespace_mount(const char *path, P9Node *tree);
+int namespace_unmount(const char *path);
+
+/* /svc filesystem */
+int svc_init(P9Node *root);
+
+#endif /* LIBREGISTRY_H */
