@@ -68,6 +68,7 @@ void service_registry_cleanup(void);
 /* Service registration */
 int service_register(const char *name, const char *type, P9Node *tree);
 int service_unregister(const char *name);
+int service_unregister_by_client(int client_fd);
 
 /* Service discovery */
 char **service_discover(const char *type, int *count);

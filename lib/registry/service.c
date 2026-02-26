@@ -421,3 +421,47 @@ P9Node* service_get_tree_by_client(int client_fd)
     pthread_rwlock_unlock(&g_registry.lock);
     return tree;
 }
+
+/*
+ * Unregister all services owned by a specific client
+ *
+ * Called when a client disconnects to clean up their services
+ *
+ * Returns: number of services unregistered, or -1 on error
+ */
+int service_unregister_by_client(int client_fd)
+{
+    ServiceEntry *entry, *prev, *next;
+    int count = 0;
+
+    pthread_rwlock_wrlock(&g_registry.lock);
+
+    prev = NULL;
+    entry = g_registry.services;
+
+    while (entry != NULL) {
+        next = entry->next;
+
+        if (entry->client_fd == client_fd) {
+            /* Remove this entry from the list */
+            if (prev == NULL) {
+                g_registry.services = next;
+            } else {
+                prev->next = next;
+            }
+
+            fprintf(stderr, "service_unregister_by_client: unregistering '%s' (fd=%d)\n",
+                    entry->name, client_fd);
+
+            free(entry);
+            count++;
+        } else {
+            prev = entry;
+        }
+
+        entry = next;
+    }
+
+    pthread_rwlock_unlock(&g_registry.lock);
+    return count;
+}

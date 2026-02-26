@@ -224,6 +224,7 @@ static void remove_client(int fd)
     int i;
     extern void fid_cleanup_conn(int client_fd); /* Declare external function */
     extern int service_unmount_by_client(int client_fd); /* From libregistry */
+    extern int service_unregister_by_client(int client_fd); /* From libregistry */
 
     for (i = 0; i < g_nclients; i++) {
         if (g_clients[i].fd == fd) {
@@ -231,11 +232,14 @@ static void remove_client(int fd)
                     g_clients[i].client_id, fd);
             fflush(stderr);
 
-            /* KEY FIX: Wipe FIDs owned by this specific FD */
-            fid_cleanup_conn(fd);
+            /* Unregister any services owned by this client */
+            service_unregister_by_client(fd);
 
             /* Unmount any service mounts from this client */
             service_unmount_by_client(fd);
+
+            /* KEY FIX: Wipe FIDs owned by this specific FD */
+            fid_cleanup_conn(fd);
 
             tcp_close(fd);
 
