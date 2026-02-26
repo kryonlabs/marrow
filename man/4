@@ -12,66 +12,42 @@ lib9p \- 9P2000 protocol library
 .br
 .BI "P9Node *tree_create_file(P9Node *" parent ", const char *" name ","
 .br
-.BI "             void *" data ", ssize_t (*" read ")(char*, size_t, uint64_t),"
+.BI "             void *" data ","
+.br
+.BI "             ssize_t (*" read ")(char*, size_t, uint64_t),"
 .br
 .BI "             ssize_t (*" write ")(const char*, size_t, uint64_t));"
 .sp
-.BI "size_t dispatch_9p(const uint8_t *" in_buf ", size_t " in_len ","
+.BI "size_t dispatch_9p(const uint8_t *" in ", size_t " in_len ","
 .br
-.BI "                  uint8_t *" out_buf ");"
+.BI "                  uint8_t *" out ");"
 .SH DESCRIPTION
-lib9p provides a complete 9P2000 protocol implementation for building
-file servers.
-.SH DATA STRUCTURES
-.TP
-.P9Node
-Tree node representing a file or directory. Contains name, QID,
-permissions, and operation handlers.
-.TP
-.P9Qid
-13-byte unique identifier (type, version, path).
-.TP
-.P9Fid
-File ID tracking for client connections.
+lib9p implements the 9P2000 file server protocol.
 .SH FUNCTIONS
 .TP
 tree_init()
-Initialize the file tree. Must be called before any tree operations.
+Initialize file tree.
 .TP
 tree_root()
-Get the root node of the file tree.
+Return root directory node.
 .TP
 tree_create_dir()
-Create a directory node under parent.
+Create directory under parent.
 .TP
 tree_create_file()
-Create a file node with read/write handlers.
+Create file with read/write handlers.
 .TP
 dispatch_9p()
-Process an incoming 9P message and generate response.
+Process 9P message, return response length.
 .SH EXAMPLE
 .EX
-/* Initialize */
 tree_init();
 P9Node *root = tree_root();
-
-/* Create /dev directory */
 P9Node *dev = tree_create_dir(root, "dev");
-
-/* Create /dev/cons with read handler */
 P9Node *cons = tree_create_file(dev, "cons", NULL,
                                  console_read, NULL);
-
-/* Process 9P messages */
-uint8_t msg_buf[8192];
-uint8_t resp_buf[8192];
-int msg_len = recv(fd, msg_buf, sizeof(msg_buf), 0);
-size_t resp_len = dispatch_9p(msg_buf, msg_len, resp_buf);
-send(fd, resp_buf, resp_len, 0);
 .EE
 .SH SEE ALSO
 .IR marrow (1),
 .IR libauth (4),
 .IR libregistry (4)
-.SH SOURCE
-https://github.com/kryonlabs/marrow
