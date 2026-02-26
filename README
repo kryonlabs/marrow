@@ -1,0 +1,122 @@
+Marrow: Portable Distributed Kernel
+
+A headless 9P-compatible kernel providing authentication, service registry,
+CPU server, and graphics devices. Marrow is the substrate for distributed
+Plan 9 computing.
+
+OVERVIEW
+
+Marrow provides a portable 9P2000 kernel that runs on Linux:
+
+    9P Server           - Complete 9P2000 protocol
+    Authentication      - dp9ik, p9any, p9sk1, factotum
+    Service Registry    - Dynamic service registration/discovery
+    CPU Server          - Plan 9 rcpu for remote execution
+    Graphics            - /dev/draw, /dev/screen, /dev/mouse, /dev/kbd
+    System Devices      - /dev/cons, /dev/fd, /proc, /env
+
+Architecture:
+
+    ┌─────────────────────────────────────────────────────┐
+    │                    Marrow Kernel                    │
+    │  • 9P2000 Server  • Auth  • Registry  • CPU Server │
+    │  • Graphics      • Devices  • Platform Abstraction │
+    └───────────────────────┬─────────────────────────────┘
+                            │ 9P/TCP
+                            ↓
+                    ┌───────────────┐
+                    │   Drawterm    │
+                    │  Any 9P Client│
+                    └───────────────┘
+
+QUICK START
+
+Build and run:
+
+    make
+    ./marrow --port 17011
+
+Connect with drawterm:
+
+    drawterm -h localhost -a tcp!localhost!17011
+
+Register a service:
+
+    echo "register myservice display" | 9p write tcp!localhost!17011/svc/ctl
+
+List services:
+
+    9p read tcp!localhost!17011/svc/discover
+
+DOCUMENTATION
+
+See man/ directory for manual pages:
+
+    man/1               - marrow(1) command reference
+    man/4               - lib9p(4), graphics library reference
+
+COMPONENTS
+
+lib/9p/              - 9P2000 protocol implementation
+lib/auth/            - Authentication (dp9ik, p9any, p9sk1, factotum)
+lib/registry/        - Service registry and CPU server
+lib/graphics/        - Graphics engine (memdraw, memimage, pixconv)
+lib/platform/        - Platform abstraction (Linux)
+sys/                 - System devices
+include/             - Public API headers
+man/                 - Plan 9 style manual pages
+
+REQUIREMENTS
+
+    - GCC or TCC (C89/C90)
+    - OpenSSL (libcrypto) - for dp9ik Ed448
+    - Linux (primary platform)
+
+BUILD
+
+    make                - Build marrow binary
+    make clean          - Clean build artifacts
+    make run            - Build and run on port 17010
+
+Binary: bin/marrow
+
+CONFIGURATION
+
+Command-line options:
+
+    --port PORT         - TCP port for 9P server (default: 17011)
+
+Keys file: /etc/marrow/keys
+
+EXAMPLES
+
+Start marrow:
+
+    ./marrow
+
+Start on custom port:
+
+    ./marrow --port 17019
+
+Test 9P connection:
+
+    9p ls tcp!localhost!17011 /
+
+List services:
+
+    9p read tcp!localhost!17011/svc/discover
+
+Read console:
+
+    9p read tcp!localhost!17011/dev/cons
+
+STATUS
+
+Version: v0.1.0-alpha
+Platform: Linux (x86_64, ARM64)
+Status: Production-ready for Linux
+
+CONTRIBUTING
+
+Maintain C89/C90 compliance. Follow Plan 9 conventions. See plan/ directory
+for architecture documentation.
