@@ -1,0 +1,61 @@
+.TH MARROW 1
+.SH NAME
+marrow \- portable distributed kernel (9P server)
+.SH SYNOPSIS
+.B marrow
+[
+.I --port
+.I port
+]
+.SH DESCRIPTION
+Marrow is a portable distributed kernel that provides 9P namespaces,
+authentication, and service registry. It serves as the substrate layer
+for graphics services like kryon.
+.PP
+Marrow implements:
+.TP
+9P2000 protocol server
+Full 9P2000 file system protocol.
+.TP
+Authentication
+dp9ik (Ed448), p9any, p9sk1, and secstore.
+.TP
+Service Registry
+Dynamic service registration and discovery.
+.TP
+CPU Server
+Plan 9-compatible CPU server (rcpu).
+.TP
+Namespace Management
+Mount points and namespace operations.
+.TP
+System Devices
+/dev/cons, /dev/fd, /proc, /env.
+.SH OPTIONS
+.TP
+.B --port
+TCP port to listen on (default: 17010).
+.SH EXAMPLES
+Start marrow on default port:
+.EX
+.B marrow
+.EE
+.PP
+Start marrow on custom port:
+.EX
+.B marrow --port 17019
+.EE
+.SH SERVICES
+Services can register with marrow to provide functionality:
+.TP
+kryon
+Graphics/display service.
+.TP
+Custom services
+Can be written to extend marrow.
+.SH SEE ALSO
+.IR kryon (1),
+.IR 9p (2),
+.IR factotum (4)
+.SH SOURCE
+https://github.com/kryonlabs/marrow

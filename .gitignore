@@ -1,0 +1,55 @@
+# Marrow - Portable Distributed Kernel
+
+# Build artifacts
+build/
+bin/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.dll
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.pid
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Coverage files
+*.gcda
+*.gcno
+*.gcov
+*.info
+
+# Dependency files
+.depend
+*.d
+
+# Nix
+result
+result-*
+.direnv/
+
+# Tags
+tags
+TAGS
