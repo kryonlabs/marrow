@@ -110,12 +110,6 @@ Read console:
 
     9p read tcp!localhost!17011/dev/cons
 
-STATUS
-
-Version: v0.1.0-alpha
-Platform: Linux (x86_64, ARM64)
-Status: Production-ready for Linux
-
 CONTRIBUTING
 
 Maintain C89/C90 compliance. Follow Plan 9 conventions. See plan/ directory

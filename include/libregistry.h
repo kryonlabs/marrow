@@ -2,6 +2,13 @@
 #define LIBREGISTRY_H
 
 #include "lib9p.h"
+#include <pthread.h>
+
+/*
+ * Service Registry API
+ * Allows external services (like kryon) to register with marrow
+ * Thread-safe: Uses pthread rwlock for concurrent access
+ */
 
 /*
  * Service Registry API
@@ -51,6 +58,7 @@ typedef struct ServiceRegistry {
     MountEntry *mounts;
     int num_services;
     int num_mounts;
+    pthread_rwlock_t lock;  /* RW lock for concurrent access */
 } ServiceRegistry;
 
 /* Registry initialization */
@@ -73,6 +81,17 @@ int service_list(ServiceInfo **services, int *count);
 /* Namespace mounting */
 int namespace_mount(const char *path, P9Node *tree);
 int namespace_unmount(const char *path);
+
+/*
+ * Service mounting from connected clients
+ * These functions track mounts by client_fd for automatic cleanup
+ */
+int service_mount_from_client(int client_fd, const char *name,
+                             const char *path, P9Node *tree);
+int service_unmount_by_client(int client_fd);
+ServiceEntry* find_service_by_client(int client_fd);
+int service_set_client_fd(const char *name, int client_fd);
+P9Node* service_get_tree_by_client(int client_fd);
 
 /* /svc filesystem */
 int svc_init(P9Node *root);

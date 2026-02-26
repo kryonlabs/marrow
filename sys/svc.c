@@ -18,6 +18,11 @@ extern int service_list(ServiceInfo **services, int *count);
 extern void service_discover_free(char **names, int count);
 extern char **service_discover(const char *type, int *count);
 extern ServiceRegistry g_registry;
+extern int service_mount_from_client(int client_fd, const char *name,
+                                     const char *path, P9Node *tree);
+extern int service_set_client_fd(const char *name, int client_fd);
+extern P9Node* service_get_tree_by_client(int client_fd);
+extern int p9_get_client_fd(void);
 
 /* Static buffer for discover output */
 static char discover_buf[8192];
@@ -104,14 +109,15 @@ static ssize_t svc_ctl_read(char *buf, size_t count, uint64_t offset, void *data
 
 /*
  * Write handler for /svc/ctl
- * Register/unregister services
+ * Register/unregister services, mount service filesystems
  */
 static ssize_t svc_ctl_write(const char *buf, size_t count, uint64_t offset, void *data)
 {
     char cmd[256];
-    char name[64], type[32];
+    char name[64], type[32], path[256];
     P9Node *root;
     P9Node *tree;
+    int client_fd;
 
     (void)offset;
     (void)data;
@@ -125,6 +131,13 @@ static ssize_t svc_ctl_write(const char *buf, size_t count, uint64_t offset, voi
 
     /* Parse: "register name type" */
     if (sscanf(cmd, "register %63s %31s", name, type) == 2) {
+        /* Get current client fd */
+        client_fd = p9_get_client_fd();
+        if (client_fd < 0) {
+            fprintf(stderr, "svc_ctl: no client fd\n");
+            return -1;
+        }
+
         /* Create service directory */
         root = tree_root();
         if (root == NULL) {
@@ -143,7 +156,11 @@ static ssize_t svc_ctl_write(const char *buf, size_t count, uint64_t offset, voi
             return -1;
         }
 
-        fprintf(stderr, "svc_ctl: registered service '%s' (type=%s)\n", name, type);
+        /* Associate service with client_fd */
+        service_set_client_fd(name, client_fd);
+
+        fprintf(stderr, "svc_ctl: registered service '%s' (type=%s, fd=%d)\n",
+                name, type, client_fd);
         return count;
     }
 
@@ -156,7 +173,47 @@ static ssize_t svc_ctl_write(const char *buf, size_t count, uint64_t offset, voi
         return count;
     }
 
+    /* Parse: "mount path" - Mount current client's service tree at path */
+    if (sscanf(cmd, "mount %255s", path) == 1) {
+        /* Get current client fd */
+        client_fd = p9_get_client_fd();
+        if (client_fd < 0) {
+            fprintf(stderr, "svc_ctl: no client fd\n");
+            return -1;
+        }
+
+        /* Find the service tree from the registry that matches this client */
+        P9Node *service_tree = service_get_tree_by_client(client_fd);
+
+        if (service_tree == NULL) {
+            fprintf(stderr, "svc_ctl: no service tree found for client %d\n", client_fd);
+            fprintf(stderr, "svc_ctl: services must register before mounting\n");
+            return -1;
+        }
+
+        /* Find service name for logging */
+        ServiceEntry *entry;
+        const char *service_name = "unknown";
+        for (entry = g_registry.services; entry != NULL; entry = entry->next) {
+            if (entry->client_fd == client_fd) {
+                service_name = entry->name;
+                break;
+            }
+        }
+
+        /* Mount the service tree */
+        if (service_mount_from_client(client_fd, service_name, path, service_tree) < 0) {
+            fprintf(stderr, "svc_ctl: failed to mount '%s'\n", path);
+            return -1;
+        }
+
+        fprintf(stderr, "svc_ctl: mounted service '%s' at '%s' (client=%d)\n",
+                service_name, path, client_fd);
+        return count;
+    }
+
     fprintf(stderr, "svc_ctl: unknown command: %s\n", cmd);
+    fprintf(stderr, "svc_ctl: usage: register name type | unregister name | mount path\n");
     return -1;
 }
 

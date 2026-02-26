@@ -7,37 +7,41 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <arpa/inet.h>
 
 /*
  * Endianness conversion functions
- * 9P uses little-endian byte order
+ * 9P uses big-endian (network byte order)
  */
 
 uint16_t le_get16(const uint8_t *buf)
 {
-    return (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+    /* 9P uses big-endian (network byte order) */
+    return (uint16_t)((uint16_t)buf[0] << 8) | (uint16_t)buf[1];
 }
 
 void le_put16(uint8_t *buf, uint16_t val)
 {
-    buf[0] = val & 0xff;
-    buf[1] = (val >> 8) & 0xff;
+    /* 9P uses big-endian (network byte order), not little-endian */
+    uint16_t be_val = htons(val);
+    memcpy(buf, &be_val, 2);
 }
 
 uint32_t le_get32(const uint8_t *buf)
 {
-    return (uint32_t)buf[0] |
-           ((uint32_t)buf[1] << 8) |
-           ((uint32_t)buf[2] << 16) |
-           ((uint32_t)buf[3] << 24);
+    /* 9P uses big-endian (network byte order) */
+    return ((uint32_t)buf[0] << 24) |
+           ((uint32_t)buf[1] << 16) |
+           ((uint32_t)buf[2] << 8) |
+           (uint32_t)buf[3];
 }
 
 void le_put32(uint8_t *buf, uint32_t val)
 {
-    buf[0] = val & 0xff;
-    buf[1] = (val >> 8) & 0xff;
-    buf[2] = (val >> 16) & 0xff;
-    buf[3] = (val >> 24) & 0xff;
+    /* 9P uses big-endian (network byte order), not little-endian */
+    uint32_t be_val = htonl(val);
+    /* Write bytes directly from memory */
+    memcpy(buf, &be_val, 4);
 }
 
 uint64_t le_get64(const uint8_t *buf)
@@ -50,6 +54,19 @@ uint64_t le_get64(const uint8_t *buf)
            ((uint64_t)buf[5] << 40) |
            ((uint64_t)buf[6] << 48) |
            ((uint64_t)buf[7] << 56);
+}
+
+/* Proper big-endian 64-bit read for 9P protocol */
+uint64_t be_get64(const uint8_t *buf)
+{
+    return ((uint64_t)buf[0] << 56) |  /* buf[0] is MSB */
+           ((uint64_t)buf[1] << 48) |
+           ((uint64_t)buf[2] << 40) |
+           ((uint64_t)buf[3] << 32) |
+           ((uint64_t)buf[4] << 24) |
+           ((uint64_t)buf[5] << 16) |
+           ((uint64_t)buf[6] << 8) |
+           (uint64_t)buf[7];            /* buf[7] is LSB */
 }
 
 void le_put64(uint8_t *buf, uint64_t val)
@@ -278,7 +295,7 @@ int p9_parse_tread(const uint8_t *buf, size_t len, uint32_t *fid, uint64_t *offs
     *fid = le_get32(p);
     p += 4;
 
-    *offset = le_get64(p);
+    *offset = be_get64(p);  /* Use big-endian for 9P offset */
     p += 8;
 
     *count = le_get32(p);
@@ -300,7 +317,7 @@ int p9_parse_twrite(const uint8_t *buf, size_t len, uint32_t *fid, uint64_t *off
     *fid = le_get32(p);
     p += 4;
 
-    *offset = le_get64(p);
+    *offset = be_get64(p);  /* Use big-endian for 9P offset */
     p += 8;
 
     *count = le_get32(p);

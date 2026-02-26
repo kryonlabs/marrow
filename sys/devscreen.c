@@ -63,17 +63,58 @@ static ssize_t devscreen_read(char *buf, size_t count, uint64_t offset,
 }
 
 /*
- * Write to /dev/screen (not supported)
+ * Write to /dev/screen
+ * Allows writing raw pixel data to the screen framebuffer
+ * This is a simplified interface for Kryon WM to update the screen
  */
 static ssize_t devscreen_write(const char *buf, size_t count, uint64_t offset,
                                void *data)
 {
-    (void)data;
-    (void)buf;
-    (void)offset;
+    ScreenState *state = (ScreenState *)data;
+    unsigned char *pixel_data;
+    size_t total_size;
+    size_t bytes_to_copy;
+    static int first_write = 1;
 
-    /* Screen is read-only from userspace */
-    return -1;  /* Error */
+    if (state == NULL || state->screen == NULL || buf == NULL) {
+        return -1;
+    }
+
+    pixel_data = state->screen->data->bdata;
+    total_size = Dx(state->screen->r) * Dy(state->screen->r) * 4;
+
+    fprintf(stderr, "devscreen_write: offset=%lu count=%lu total_size=%lu\n",
+            (unsigned long)offset, (unsigned long)count, (unsigned long)total_size);
+
+    if (offset >= total_size) {
+        return 0;  /* EOF - nothing to write */
+    }
+
+    /* Calculate how many bytes to copy */
+    if (offset + count > total_size) {
+        bytes_to_copy = total_size - offset;
+    } else {
+        bytes_to_copy = count;
+    }
+
+    /* Copy pixel data to screen */
+    memcpy(pixel_data + offset, buf, bytes_to_copy);
+
+    /* Dump first 100 bytes on first write */
+    if (first_write && offset == 0) {
+        int i;
+        int dump_bytes = (count < 100) ? count : 100;
+        fprintf(stderr, "devscreen_write: First %d bytes received: ", dump_bytes);
+        for (i = 0; i < dump_bytes; i++) {
+            fprintf(stderr, "%02X ", (unsigned char)buf[i]);
+        }
+        fprintf(stderr, "\n");
+        first_write = 0;
+    }
+
+    fprintf(stderr, "devscreen_write: wrote %lu bytes to screen\n", (unsigned long)bytes_to_copy);
+
+    return bytes_to_copy;
 }
 
 /*

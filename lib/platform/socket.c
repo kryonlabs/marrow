@@ -184,7 +184,7 @@ int tcp_recv_msg(int fd, unsigned char *buf, size_t buf_size)
     }
 
     /* Convert from network byte order */
-    msg_len = le32toh(msg_len);
+    msg_len = ntohl(msg_len);
 
     /* Declare variables at top of block for C89 */
     {

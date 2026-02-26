@@ -167,10 +167,11 @@ typedef ssize_t (*P9ReadFunc)(char *buf, size_t count, uint64_t offset);
 typedef ssize_t (*P9WriteFunc)(const char *buf, size_t count, uint64_t offset);
 
 /*
- * Endianness conversion (9P uses little-endian)
+ * Endianness conversion (9P uses big-endian/network byte order)
  */
 uint32_t le_get32(const uint8_t *buf);
 uint64_t le_get64(const uint8_t *buf);
+uint64_t be_get64(const uint8_t *buf);  /* Big-endian 64-bit read */
 void le_put32(uint8_t *buf, uint32_t val);
 void le_put64(uint8_t *buf, uint64_t val);
 uint16_t le_get16(const uint8_t *buf);

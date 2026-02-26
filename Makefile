@@ -7,7 +7,7 @@ ifeq ($(CC),)
     CC = gcc
 endif
 
-CFLAGS = -std=c89 -Wall -Wpedantic -g
+CFLAGS = -std=c89 -Wall -Wpedantic -g -D_POSIX_C_SOURCE=200112L
 LDFLAGS =
 
 # Detect Nix environment

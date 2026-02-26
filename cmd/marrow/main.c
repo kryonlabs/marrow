@@ -223,6 +223,7 @@ static void remove_client(int fd)
 {
     int i;
     extern void fid_cleanup_conn(int client_fd); /* Declare external function */
+    extern int service_unmount_by_client(int client_fd); /* From libregistry */
 
     for (i = 0; i < g_nclients; i++) {
         if (g_clients[i].fd == fd) {
@@ -232,6 +233,9 @@ static void remove_client(int fd)
 
             /* KEY FIX: Wipe FIDs owned by this specific FD */
             fid_cleanup_conn(fd);
+
+            /* Unmount any service mounts from this client */
+            service_unmount_by_client(fd);
 
             tcp_close(fd);
 
@@ -428,7 +432,7 @@ int main(int argc, char **argv)
     }
 
     /* Initialize subsystems */
-    fprintf(stderr, "Marrow v0.1.0-alpha - Portable Distributed Kernel\n");
+    fprintf(stderr, "Marrow - Portable Distributed Kernel\n");
     fprintf(stderr, "Initializing...\n");
 
     if (tree_init() < 0) {
@@ -513,28 +517,65 @@ int main(int argc, char **argv)
     }
 
     /* Initialize graphics - create screen buffer */
-    {
-        Rectangle screen_rect;
-        Memimage *screen;
+    Memimage *screen;
+    Rectangle screen_rect;
 
-        screen_rect = Rect(0, 0, 800, 600);
-        screen = memimage_alloc(screen_rect, RGBA32);
-        if (screen == NULL) {
-            fprintf(stderr, "Error: failed to allocate screen\n");
-            return 1;
-        }
-
-        /* Clear screen to white */
-        memfillcolor(screen, 0xFFFFFFFF);
-
-        /* Initialize draw connection system */
-        if (drawconn_init(screen) < 0) {
-            fprintf(stderr, "Warning: failed to initialize draw connection system\n");
-        }
-
-        fprintf(stderr, "  Created %dx%d RGBA32 screen\n",
-                Dx(screen_rect), Dy(screen_rect));
+    screen_rect = Rect(0, 0, 800, 600);
+    screen = memimage_alloc(screen_rect, RGBA32);
+    if (screen == NULL) {
+        fprintf(stderr, "Error: failed to allocate screen\n");
+        return 1;
     }
+
+    /* Clear screen to white */
+    memfillcolor(screen, 0xFFFFFFFF);
+
+    /* Draw a test pattern - red rectangle to show it's working */
+    {
+        Memimage *rect_img;
+        Rectangle rect_rect;
+        rect_rect = Rect(100, 100, 300, 200);
+        rect_img = memimage_alloc(rect_rect, RGB24);
+        if (rect_img != NULL) {
+            memfillcolor(rect_img, 0xFF0000);  /* Red */
+            memdraw(screen, rect_rect, rect_img, Pt(0, 0), NULL, Pt(0, 0), SoverD);
+            free(rect_img);
+        }
+    }
+
+    /* Draw a blue rectangle (approximation) */
+    {
+        Memimage *blue_img;
+        Rectangle blue_rect;
+        blue_rect = Rect(400, 100, 600, 300);
+        blue_img = memimage_alloc(blue_rect, RGB24);
+        if (blue_img != NULL) {
+            memfillcolor(blue_img, 0x0000FF);  /* Blue */
+            memdraw(screen, blue_rect, blue_img, Pt(0, 0), NULL, Pt(0, 0), SoverD);
+            free(blue_img);
+        }
+    }
+
+    /* Draw green text area */
+    {
+        Memimage *green_img;
+        Rectangle green_rect;
+        green_rect = Rect(100, 400, 700, 500);
+        green_img = memimage_alloc(green_rect, RGB24);
+        if (green_img != NULL) {
+            memfillcolor(green_img, 0x00FF00);  /* Green */
+            memdraw(screen, green_rect, green_img, Pt(0, 0), NULL, Pt(0, 0), SoverD);
+            free(green_img);
+        }
+    }
+
+    /* Initialize draw connection system */
+    if (drawconn_init(screen) < 0) {
+        fprintf(stderr, "Warning: failed to initialize draw connection system\n");
+    }
+
+    fprintf(stderr, "  Created %dx%d RGBA32 screen\n",
+            Dx(screen_rect), Dy(screen_rect));
 
     /* Create /dev/draw directory */
     {
@@ -551,7 +592,7 @@ int main(int argc, char **argv)
     }
 
     /* Initialize graphics devices */
-    if (devscreen_init(dev_dir, NULL) < 0) {
+    if (devscreen_init(dev_dir, screen) < 0) {
         fprintf(stderr, "Warning: failed to initialize /dev/screen\n");
     }
 
