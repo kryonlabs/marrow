@@ -28,6 +28,10 @@ static int current_client_fd = -1;
  */
 void p9_set_client_fd(int fd)
 {
+    /* Verbose logging disabled - uncomment for debugging
+    fprintf(stderr, "p9_set_client_fd: setting current_client_fd from %d to %d\n",
+            current_client_fd, fd);
+    */
     current_client_fd = fd;
 }
 
@@ -89,36 +93,64 @@ void fid_cleanup_conn(int client_fd)
 
 /*
  * Allocate a new FID
+ * Uses linear search to support multiple clients with same FID numbers
  */
 P9Fid *fid_new(uint32_t fid_num, P9Node *node)
 {
-    if (fid_num >= P9_MAX_FID) return NULL;
+    int i;
+    int free_slot = -1;
 
-    if (fid_table[fid_num].node != NULL && fid_table[fid_num].client_fd == current_client_fd) {
+    /* Search for existing FID for this client, or find a free slot */
+    for (i = 0; i < P9_MAX_FID; i++) {
+        if (fid_table[i].node == NULL) {
+            /* Found a free slot */
+            if (free_slot < 0) free_slot = i;
+        } else if (fid_table[i].client_fd == current_client_fd &&
+                   fid_table[i].fid == fid_num) {
+            /* FID already in use by this client */
+            fprintf(stderr, "fid_new: FID %u already in use for client_fd=%d\n",
+                    fid_num, current_client_fd);
+            return NULL;
+        }
+    }
+
+    if (free_slot < 0) {
+        fprintf(stderr, "fid_new: no free slots in FID table\n");
         return NULL;
     }
 
-    fid_table[fid_num].fid = fid_num;
-    fid_table[fid_num].node = node;
-    fid_table[fid_num].client_fd = current_client_fd;
-    fid_table[fid_num].is_open = 0;
-    fid_table[fid_num].mode = 0;
+    /* Allocate in free slot */
+    fid_table[free_slot].fid = fid_num;
+    fid_table[free_slot].node = node;
+    fid_table[free_slot].client_fd = current_client_fd;
+    fid_table[free_slot].is_open = 0;
+    fid_table[free_slot].mode = 0;
 
-    return &fid_table[fid_num];
+    fprintf(stderr, "fid_new: created FID %u for client_fd=%d in slot %d\n",
+            fid_num, current_client_fd, free_slot);
+
+    return &fid_table[free_slot];
 }
 
 /*
  * Get an existing FID
+ * Uses linear search to find (client_fd, fid_num) pair
  */
 P9Fid *fid_get(uint32_t fid_num)
 {
-    if (fid_num >= P9_MAX_FID) return NULL;
+    int i;
 
-    if (fid_table[fid_num].node == NULL || fid_table[fid_num].client_fd != current_client_fd) {
-        return NULL;
+    for (i = 0; i < P9_MAX_FID; i++) {
+        if (fid_table[i].node != NULL &&
+            fid_table[i].client_fd == current_client_fd &&
+            fid_table[i].fid == fid_num) {
+            return &fid_table[i];
+        }
     }
 
-    return &fid_table[fid_num];
+    fprintf(stderr, "fid_get: FID %u not found for client_fd=%d\n",
+            fid_num, current_client_fd);
+    return NULL;
 }
 
 /*
@@ -131,19 +163,34 @@ int fid_put(uint32_t fid_num)
 
 /*
  * Clunk a FID (close if open, then release)
+ * Uses linear search to find (client_fd, fid_num) pair
  */
-
 int fid_clunk(uint32_t fid_num)
 {
-    P9Fid *fid = fid_get(fid_num);
-    if (fid == NULL) return -1;
+    int i;
 
-    fid->node = NULL;
-    fid->client_fd = -1;
-    fid->is_open = 0;
-    fid->mode = 0;
+    for (i = 0; i < P9_MAX_FID; i++) {
+        if (fid_table[i].node != NULL &&
+            fid_table[i].client_fd == current_client_fd &&
+            fid_table[i].fid == fid_num) {
 
-    return 0;
+            if (fid_table[i].is_open) {
+                /* Note: fd field not used in current implementation */
+                /* close(fid_table[i].fd); */
+            }
+
+            fid_table[i].node = NULL;
+            fid_table[i].client_fd = -1;
+            fid_table[i].is_open = 0;
+            fid_table[i].mode = 0;
+
+            return 0;
+        }
+    }
+
+    fprintf(stderr, "fid_clunk: FID %u not found for client_fd=%d\n",
+            fid_num, current_client_fd);
+    return -1;
 }
 
 /*
@@ -231,6 +278,7 @@ size_t handle_tattach(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
     /* Create FID */
     fid_obj = fid_new(fid, root);
     if (fid_obj == NULL) {
+        fprintf(stderr, "handle_tattach: FID %u already in use!\n", fid);
         return p9_build_rerror(out_buf, hdr.tag, "fid in use");
     }
 
@@ -299,10 +347,21 @@ size_t handle_twalk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
         return p9_build_rerror(out_buf, hdr.tag, "invalid Twalk");
     }
 
+    fprintf(stderr, "handle_twalk: fid=%u newfid=%u nwname=%d (current_client_fd=%d)\n",
+            fid, newfid, nwname, current_client_fd);
+
     /* Get source FID */
     fid_obj = fid_get(fid);
     if (fid_obj == NULL) {
+        fprintf(stderr, "handle_twalk: ERROR - fid_get(%u) returned NULL for current_client_fd=%d\n",
+                fid, current_client_fd);
         /* No need to free wnames - they point into input buffer */
+        fprintf(stderr, "handle_twalk: ERROR - fid %u not found in server's fid table!\n", fid);
+        return p9_build_rerror(out_buf, hdr.tag, "fid not found");
+    }
+    if (fid_obj == NULL) {
+        /* No need to free wnames - they point into input buffer */
+        fprintf(stderr, "handle_twalk: ERROR - fid %u not found in server's fid table!\n", fid);
         return p9_build_rerror(out_buf, hdr.tag, "fid not found");
     }
 

@@ -42,8 +42,10 @@ static ssize_t devscreen_read(char *buf, size_t count, uint64_t offset,
     pixel_data = state->screen->data->bdata;
     total_size = Dx(state->screen->r) * Dy(state->screen->r) * 4;
 
+    /* Verbose logging disabled - uncomment for debugging
     fprintf(stderr, "devscreen_read: offset=%lu count=%lu total_size=%lu\n",
             (unsigned long)offset, (unsigned long)count, (unsigned long)total_size);
+    */
 
     if (offset >= total_size) {
         return 0;  /* EOF */
@@ -57,7 +59,9 @@ static ssize_t devscreen_read(char *buf, size_t count, uint64_t offset,
 
     memcpy(buf, pixel_data + offset, bytes_to_copy);
 
+    /* Verbose logging disabled - uncomment for debugging
     fprintf(stderr, "devscreen_read: returning %lu bytes\n", (unsigned long)bytes_to_copy);
+    */
 
     return bytes_to_copy;
 }
@@ -83,8 +87,10 @@ static ssize_t devscreen_write(const char *buf, size_t count, uint64_t offset,
     pixel_data = state->screen->data->bdata;
     total_size = Dx(state->screen->r) * Dy(state->screen->r) * 4;
 
+    /* Verbose logging disabled - uncomment for debugging
     fprintf(stderr, "devscreen_write: offset=%lu count=%lu total_size=%lu\n",
             (unsigned long)offset, (unsigned long)count, (unsigned long)total_size);
+    */
 
     if (offset >= total_size) {
         return 0;  /* EOF - nothing to write */
@@ -100,7 +106,7 @@ static ssize_t devscreen_write(const char *buf, size_t count, uint64_t offset,
     /* Copy pixel data to screen */
     memcpy(pixel_data + offset, buf, bytes_to_copy);
 
-    /* Dump first 100 bytes on first write */
+    /* Dump first 100 bytes on first write - disabled for cleaner output
     if (first_write && offset == 0) {
         int i;
         int dump_bytes = (count < 100) ? count : 100;
@@ -111,8 +117,11 @@ static ssize_t devscreen_write(const char *buf, size_t count, uint64_t offset,
         fprintf(stderr, "\n");
         first_write = 0;
     }
+    */
 
+    /* Verbose logging disabled - uncomment for debugging
     fprintf(stderr, "devscreen_write: wrote %lu bytes to screen\n", (unsigned long)bytes_to_copy);
+    */
 
     return bytes_to_copy;
 }

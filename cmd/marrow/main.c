@@ -59,7 +59,6 @@ extern int handle_rcpu_connection(int fd);
  */
 #ifdef INCLUDE_CPU_SERVER
 extern int cpu_server_init(P9Node *root);
-extern void p9_set_client_fd(int fd);
 #endif
 
 /*
@@ -116,6 +115,7 @@ static int detect_client_protocol(int fd)
         fprintf(stderr, "Protocol detection: recv failed: %s\n", strerror(errno));
         return PROTOCOL_9P;
     }
+    /* Verbose hex dump disabled - uncomment for debugging
     fprintf(stderr, "Protocol detection: peeked %zd bytes: ", n);
     for (i = 0; i < n && i < 12; i++) {
         if (peek[i] >= 32 && peek[i] <= 126) {
@@ -125,12 +125,12 @@ static int detect_client_protocol(int fd)
         }
     }
     fprintf(stderr, "\n");
+    */
 
     /* Check for authentication protocols first - they can start with just 3 bytes */
     if (n >= 3) {
         /* p9 auth negotiation: starts with "p9 " */
         if (memcmp(peek, "p9 ", 3) == 0) {
-            fprintf(stderr, "Protocol detection: p9 auth\n");
             return PROTOCOL_AUTH_P9;
         }
     }
@@ -146,7 +146,6 @@ static int detect_client_protocol(int fd)
         }
 
         if (is_digits && peek[7] == '\n') {
-            fprintf(stderr, "Protocol detection: rcpu (script-based)\n");
             return PROTOCOL_RCPU;
         }
     }
@@ -156,17 +155,14 @@ static int detect_client_protocol(int fd)
         /* secstore auth: starts with 0x80 0x17 followed by "secstore" */
         if (peek[0] == (char)0x80 && peek[1] == (char)0x17 &&
             memcmp(peek + 2, "secstore", 8) == 0) {
-            fprintf(stderr, "Protocol detection: secstore auth\n");
             return PROTOCOL_AUTH_SEC;
         }
     }
 
     if (n < 8) {
-        fprintf(stderr, "Protocol detection: too few bytes, assuming 9P\n");
         return PROTOCOL_9P;
     }
 
-    fprintf(stderr, "Protocol detection: 9P\n");
     return PROTOCOL_9P;
 }
 
@@ -179,18 +175,15 @@ static void drain_socket(int fd)
     ssize_t n;
     int total_drained = 0;
 
-    fprintf(stderr, "drain_socket: draining fd=%d\n", fd);
-
     do {
         n = recv(fd, drain_buf, sizeof(drain_buf), MSG_DONTWAIT);
         if (n > 0) {
             total_drained += n;
-            fprintf(stderr, "drain_socket: drained %zd bytes (total=%d)\n", n, total_drained);
         }
     } while (n > 0);
 
     if (total_drained > 0) {
-        fprintf(stderr, "drain_socket: total drained: %d bytes\n", total_drained);
+        fprintf(stderr, "drain_socket: drained %d bytes from fd=%d\n", total_drained, fd);
     }
 }
 
@@ -211,7 +204,6 @@ static int add_client(int fd)
 
     fprintf(stderr, "Client %u connected (fd=%d, total=%d)\n",
             g_clients[g_nclients - 1].client_id, fd, g_nclients);
-    fflush(stderr);
 
     return 0;
 }
@@ -225,12 +217,12 @@ static void remove_client(int fd)
     extern void fid_cleanup_conn(int client_fd); /* Declare external function */
     extern int service_unmount_by_client(int client_fd); /* From libregistry */
     extern int service_unregister_by_client(int client_fd); /* From libregistry */
+    extern void auth_session_delete(int client_fd); /* From auth/session.c */
 
     for (i = 0; i < g_nclients; i++) {
         if (g_clients[i].fd == fd) {
             fprintf(stderr, "Client %u disconnected (fd=%d)\n",
                     g_clients[i].client_id, fd);
-            fflush(stderr);
 
             /* Unregister any services owned by this client */
             service_unregister_by_client(fd);
@@ -240,6 +232,9 @@ static void remove_client(int fd)
 
             /* KEY FIX: Wipe FIDs owned by this specific FD */
             fid_cleanup_conn(fd);
+
+            /* Clean up authentication session */
+            auth_session_delete(fd);
 
             tcp_close(fd);
 
@@ -264,11 +259,8 @@ static int handle_client_request(ClientInfo *client)
     size_t resp_len;
     int result;
 
-    /* Set current client fd for CPU server tracking */
-#ifdef INCLUDE_CPU_SERVER
-    extern void p9_set_client_fd(int fd);
+    /* Set current client fd for FID management (CRITICAL!) */
     p9_set_client_fd(client->fd);
-#endif
 
     /* Receive message (non-blocking) */
     msg_len = tcp_recv_msg(client->fd, msg_buf, sizeof(msg_buf));
@@ -281,11 +273,10 @@ static int handle_client_request(ClientInfo *client)
         return 0;
     }
 
-    /* Log received message */
+    /* Verbose message logging disabled - uncomment for debugging
     if (msg_len >= 5) {
         fprintf(stderr, "Client %u: received message len=%d type=0x%02x ",
                 client->client_id, msg_len, msg_buf[4]);
-        /* Show message type name */
         switch (msg_buf[4]) {
             case 0x64: fprintf(stderr, "(Tversion)\n"); break;
             case 0x65: fprintf(stderr, "(Tauth)\n"); break;
@@ -301,6 +292,7 @@ static int handle_client_request(ClientInfo *client)
         fprintf(stderr, "Client %u: received short message len=%d\n",
                 client->client_id, msg_len);
     }
+    */
 
     /* Dispatch message */
     resp_len = dispatch_9p(msg_buf, (size_t)msg_len, resp_buf);
@@ -310,11 +302,10 @@ static int handle_client_request(ClientInfo *client)
         return -1;
     }
 
-    /* Log response message */
+    /* Verbose response logging disabled - uncomment for debugging
     if (resp_len >= 5) {
         fprintf(stderr, "Client %u: sending response len=%zu type=0x%02x ",
                 client->client_id, resp_len, resp_buf[4]);
-        /* Show response type name */
         switch (resp_buf[4]) {
             case 0x64: fprintf(stderr, "(Rversion)\n"); break;
             case 0x65: fprintf(stderr, "(Rauth)\n"); break;
@@ -327,6 +318,7 @@ static int handle_client_request(ClientInfo *client)
             default: fprintf(stderr, "(unknown)\n"); break;
         }
     }
+    */
 
     /* Send response */
     result = tcp_send_msg(client->fd, resp_buf, resp_len);
@@ -675,14 +667,8 @@ int main(int argc, char **argv)
 
         /* Check for new connections */
         if (FD_ISSET(listen_fd, &readfds)) {
-            fprintf(stderr, "DEBUG: Connection detected on listen_fd\n");
-            fflush(stderr);
             client_fd = tcp_accept(listen_fd);
-            fprintf(stderr, "DEBUG: tcp_accept returned fd=%d (errno=%d if error)\n", client_fd, client_fd < 0 ? errno : 0);
-            fflush(stderr);
             if (client_fd >= 0) {
-                fprintf(stderr, "Accepted connection from client\n");
-                fflush(stderr);
 
                 /* Ensure socket is in blocking mode for authentication */
                 {
@@ -695,26 +681,21 @@ int main(int argc, char **argv)
 
                 /* Detect protocol */
                 int protocol_type;
-                fflush(stderr);
                 protocol_type = detect_client_protocol(client_fd);
 
                 if (protocol_type == PROTOCOL_RCPU) {
                     fprintf(stderr, "Detected rcpu protocol, spawning shell handler\n");
-                    fflush(stderr);
                     /* Handle rcpu connection in separate handler */
                     if (handle_rcpu_connection(client_fd) < 0) {
                         fprintf(stderr, "rcpu handler failed, closing connection\n");
-                        fflush(stderr);
                         tcp_close(client_fd);
                     }
                     /* Don't add to select() loop - rcpu manages its own fd */
                 } else if (protocol_type == PROTOCOL_AUTH_P9) {
                     fprintf(stderr, "Detected p9 auth, starting authentication\n");
-                    fflush(stderr);
                     /* Handle p9any authentication with localhost domain */
                     if (p9any_handler(client_fd, "localhost") < 0) {
                         fprintf(stderr, "p9any authentication failed\n");
-                        fflush(stderr);
                         drain_socket(client_fd);
                         tcp_close(client_fd);
                     } else {
@@ -722,18 +703,15 @@ int main(int argc, char **argv)
                         fprintf(stderr, "Authentication successful, adding client\n");
                         if (add_client(client_fd) < 0) {
                             fprintf(stderr, "Too many clients, rejecting connection\n");
-                            fflush(stderr);
                             drain_socket(client_fd);
                             tcp_close(client_fd);
                         }
                     }
                 } else if (protocol_type == PROTOCOL_AUTH_SEC) {
                     fprintf(stderr, "Detected secstore auth\n");
-                    fflush(stderr);
                     /* Handle secstore authentication */
                     if (secstore_handler(client_fd) < 0) {
                         fprintf(stderr, "secstore authentication failed\n");
-                        fflush(stderr);
                         drain_socket(client_fd);
                         tcp_close(client_fd);
                     } else {
@@ -744,7 +722,6 @@ int main(int argc, char **argv)
                     /* Standard 9P client */
                     if (add_client(client_fd) < 0) {
                         fprintf(stderr, "Too many clients, rejecting connection\n");
-                        fflush(stderr);
                         tcp_close(client_fd);
                     }
                 }

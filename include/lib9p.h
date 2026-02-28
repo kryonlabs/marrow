@@ -245,6 +245,12 @@ int fid_put(uint32_t fid_num);
 int fid_clunk(uint32_t fid_num);
 
 /*
+ * Client FID tracking for multi-client support
+ */
+void p9_set_client_fd(int fd);
+int p9_get_client_fd(void);
+
+/*
  * 9P Operation handlers
  */
 size_t handle_tversion(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
