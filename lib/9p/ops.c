@@ -287,32 +287,18 @@ size_t handle_tattach(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
 
 /*
  * Handle Tauth
- * Return Rauth with QID to indicate no authentication required
- * This is what many 9P servers do
+ * Return Rerror "no authentication required" - this is the correct 9P way
+ * to signal the client should use NOFID as afid in Tattach.
  */
 size_t handle_tauth(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
 {
     P9Hdr hdr;
-    char uname[P9_MAX_STR];
-    char aname[P9_MAX_STR];
-    P9Qid qid;
 
-    /* Parse request */
     if (p9_parse_header(in_buf, in_len, &hdr) < 0) {
         return 0;
     }
 
-    if (p9_parse_tauth(in_buf, in_len, uname, aname) < 0) {
-        return p9_build_rerror(out_buf, hdr.tag, "invalid Tauth");
-    }
-
-    /* Return Rauth with QID indicating authentication file */
-    /* Use QID path 1 for the auth fid */
-    qid.type = QTAUTH;
-    qid.version = 0;
-    qid.path = 1;
-
-    return p9_build_rauth(out_buf, hdr.tag, &qid);
+    return p9_build_rerror(out_buf, hdr.tag, "no authentication required");
 }
 
 /*

@@ -244,4 +244,109 @@ int dp9ik_decrypt_ticket_mvp(const unsigned char *encrypted, int enc_len,
 int dp9ik_parse_authenticator_mvp(const unsigned char *buf, int len,
                                    Authenticator *a);
 
+/* ------------------------------------------------------------------ */
+/*  Real SPAKE2-EE PAK functions (Ed448-backed)                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Find dp9ik password from factotum key store.
+ * Looks up proto=dp9ik key for given user and domain.
+ * Returns allocated password string (caller must free) or NULL if not found.
+ */
+char *dp9ik_find_password(const char *user, const char *dom);
+
+/*
+ * Deserialize ticket request from buffer.
+ * Returns 0 on success, -1 on error.
+ */
+int dp9ik_deserialize_ticketreq(const unsigned char *buf, size_t len, Ticketreq *tr);
+
+/*
+ * Compute blinded server key: out = pubkey + hash_to_point(password || domain || user)
+ * Used to send YBs = Ys + M to the client without revealing Ys.
+ * Returns 0 on success, -1 on error.
+ */
+int dp9ik_pak_blind(unsigned char out[AUTH_PAKYLEN],
+                    const unsigned char pubkey[AUTH_PAKYLEN],
+                    const char *password, const char *domain, const char *user);
+
+/*
+ * Unmask client blinded key: out = ybc - hash_to_point(password || domain || user)
+ * Recovers Yc from YBc: Yc = YBc - M
+ * Returns 0 on success, -1 on error.
+ */
+int dp9ik_pak_unmask(unsigned char out[AUTH_PAKYLEN],
+                     const unsigned char ybc[AUTH_PAKYLEN],
+                     const char *password, const char *domain, const char *user);
+
+/*
+ * Compute PAK shared secret: out = scalar * point
+ * Used to compute ss = s * Yc after unmasking the client's key.
+ * scalar: 56-byte Ed448 private scalar
+ * point:  57-byte encoded Ed448 public point
+ * Returns 0 on success, -1 on error.
+ */
+int dp9ik_pak_shared_secret(unsigned char out[AUTH_PAKYLEN],
+                             const unsigned char scalar[DPIK_KEYLEN],
+                             const unsigned char point[AUTH_PAKYLEN]);
+
+/*
+ * Derive session key Kn from PAK shared secret and challenges.
+ * Kn = HKDF-SHA256(ss, "dp9ik session key" || chal_c || chal_s || user)
+ * kn:     output buffer for session key
+ * knlen:  length of kn (typically DPIK_SESSION_KEY_LEN = 32)
+ * ss:     57-byte shared secret (encoded Ed448 point)
+ * chal_c: 8-byte client challenge
+ * chal_s: 8-byte server challenge (from Ticketreq.chal)
+ * user:   username string
+ * Returns 0 on success, -1 on error.
+ */
+int dp9ik_derive_session_key(unsigned char *kn, size_t knlen,
+                              const unsigned char *ss,
+                              const unsigned char *chal_c,
+                              const unsigned char *chal_s,
+                              const char *user);
+
+/*
+ * Encrypt Ticket into form1 format using session key Kn.
+ * Output: ciphertext + 16-byte Poly1305 tag (NOT including nonce).
+ * nonce: 12-byte ChaCha20 nonce (caller provides).
+ * Returns 0 on success, -1 on error. Sets *outlen to bytes written.
+ */
+int dp9ik_encrypt_ticket_real(unsigned char *out, int *outlen,
+                               const Ticket *t,
+                               const unsigned char *kn,
+                               const unsigned char *nonce);
+
+/*
+ * Decrypt a form1-encrypted Ticket using session key Kn.
+ * cipher: ciphertext + tag (WITHOUT nonce prepended).
+ * nonce:  12-byte ChaCha20 nonce (caller provides).
+ * Returns 0 on success, -1 on error (bad tag = authentication failure).
+ */
+int dp9ik_decrypt_ticket_real(Ticket *t,
+                               const unsigned char *cipher, int cipherlen,
+                               const unsigned char *kn,
+                               const unsigned char *nonce);
+
+/*
+ * Encrypt Authenticator into form1 format.
+ * Output: nonce(12) || ciphertext+tag.  Total: 12 + 17 + 16 = 45 bytes.
+ * nonce: 12-byte nonce (prepended to output).
+ * Returns 0 on success, -1 on error. Sets *outlen to ciphertext+tag size.
+ */
+int dp9ik_encrypt_authenticator(unsigned char *out, int *outlen,
+                                 const Authenticator *a,
+                                 const unsigned char *kn,
+                                 const unsigned char *nonce);
+
+/*
+ * Decrypt a form1-encrypted Authenticator.
+ * cipher: nonce(12) || ciphertext+tag (nonce IS prepended).
+ * Returns 0 on success, -1 on error (bad tag = authentication failure).
+ */
+int dp9ik_decrypt_authenticator(Authenticator *a,
+                                 const unsigned char *cipher, int cipherlen,
+                                 const unsigned char *kn);
+
 #endif /* AUTH_DPIK_H */

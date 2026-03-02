@@ -36,8 +36,8 @@ extern int devenv_init(P9Node *root);
 extern int devscreen_init(P9Node *dev_dir, Memimage *screen);
 extern int devmouse_init(P9Node *dev_dir);
 extern int devkbd_init(P9Node *dev_dir);
+extern int devaudio_init(P9Node *dev_dir);
 extern int devdraw_new_init(P9Node *draw_dir);
-extern int drawconn_init(Memimage *screen);
 extern void drawconn_cleanup(void);
 extern void devscreen_cleanup(void);
 extern int svc_init(P9Node *root);
@@ -415,8 +415,8 @@ int main(int argc, char **argv)
     int result;
     P9Node *root = NULL;
     P9Node *dev_dir;
-    P9Node *file;
-    StaticFileData *static_data;
+    Memimage *screen;
+    Rectangle screen_rect;
 
     /* Parse arguments */
     result = parse_args(argc, argv, &port);
@@ -513,9 +513,6 @@ int main(int argc, char **argv)
     }
 
     /* Initialize graphics - create screen buffer */
-    Memimage *screen;
-    Rectangle screen_rect;
-
     screen_rect = Rect(0, 0, 800, 600);
     screen = memimage_alloc(screen_rect, RGBA32);
     if (screen == NULL) {
@@ -531,7 +528,7 @@ int main(int argc, char **argv)
         Memimage *rect_img;
         Rectangle rect_rect;
         rect_rect = Rect(100, 100, 300, 200);
-        rect_img = memimage_alloc(rect_rect, RGB24);
+        rect_img = memimage_alloc(rect_rect, RGBA32);
         if (rect_img != NULL) {
             memfillcolor(rect_img, 0xFF0000);  /* Red */
             memdraw(screen, rect_rect, rect_img, Pt(0, 0), NULL, Pt(0, 0), SoverD);
@@ -544,7 +541,7 @@ int main(int argc, char **argv)
         Memimage *blue_img;
         Rectangle blue_rect;
         blue_rect = Rect(400, 100, 600, 300);
-        blue_img = memimage_alloc(blue_rect, RGB24);
+        blue_img = memimage_alloc(blue_rect, RGBA32);
         if (blue_img != NULL) {
             memfillcolor(blue_img, 0x0000FF);  /* Blue */
             memdraw(screen, blue_rect, blue_img, Pt(0, 0), NULL, Pt(0, 0), SoverD);
@@ -557,7 +554,7 @@ int main(int argc, char **argv)
         Memimage *green_img;
         Rectangle green_rect;
         green_rect = Rect(100, 400, 700, 500);
-        green_img = memimage_alloc(green_rect, RGB24);
+        green_img = memimage_alloc(green_rect, RGBA32);
         if (green_img != NULL) {
             memfillcolor(green_img, 0x00FF00);  /* Green */
             memdraw(screen, green_rect, green_img, Pt(0, 0), NULL, Pt(0, 0), SoverD);
@@ -600,6 +597,11 @@ int main(int argc, char **argv)
         fprintf(stderr, "Warning: failed to initialize /dev/kbd\n");
     }
 
+    /* Initialize audio device */
+    if (devaudio_init(dev_dir) < 0) {
+        fprintf(stderr, "Warning: failed to initialize /dev/audio\n");
+    }
+
     /* Create /mnt directory for service mounting */
     {
         P9Node *mnt_node;
@@ -640,6 +642,7 @@ int main(int argc, char **argv)
         int max_fd;
         int i;
         int select_result;
+        int protocol_type;
 
         FD_ZERO(&readfds);
         FD_SET(listen_fd, &readfds);
@@ -680,7 +683,6 @@ int main(int argc, char **argv)
                 }
 
                 /* Detect protocol */
-                int protocol_type;
                 protocol_type = detect_client_protocol(client_fd);
 
                 if (protocol_type == PROTOCOL_RCPU) {

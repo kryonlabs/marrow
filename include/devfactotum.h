@@ -24,16 +24,24 @@ typedef long ssize_t;
 #endif
 
 /*
- * Authentication constants from 9front authsrv.h
+ * Authentication constants matching 9front authsrv.h exactly.
  */
 #define AUTH_ANAMELEN    28      /* Authentication name length */
 #define AUTH_DOMLEN      48      /* Domain name length */
-#define AUTH_CHALLEN     8       /* Challenge length */
-#define AUTH_NONCELEN    8       /* Nonce length for p9sk1 */
-#define AUTH_PAKYLEN     57      /* dp9ik Ed448 key length (decaf encoded) */
-#define AUTH_PAKKEYLEN   32      /* PAK shared secret length (Kn) */
-#define AUTH_TICKETLEN   73      /* Base ticket size (num + chal + cuid + suid + key) */
-#define AUTH_FORM1HDRLEN 12      /* form1 header length */
+#define AUTH_CHALLEN     8       /* Challenge length (server challenge) */
+#define AUTH_NONCELEN    32      /* NONCELEN: Authenticator rand field (dp9ik form=1) */
+#define AUTH_DESKEYLEN   7       /* DES key length */
+#define AUTH_AESKEYLEN   16      /* AES key length (from PBKDF2-SHA1) */
+#define AUTH_PAKSLEN     56      /* Ed448 scalar/field element (448 bits = 56 bytes) */
+#define AUTH_PAKYLEN     56      /* Decaf-encoded public key (56 bytes, NOT 57) */
+#define AUTH_PAKXLEN     56      /* Private scalar length */
+#define AUTH_PAKPLEN     (4*AUTH_PAKSLEN)   /* Extended point X,Y,Z,T = 224 bytes */
+#define AUTH_PAKHASHLEN  (2*AUTH_PAKPLEN)   /* Blinding points PM+PN = 448 bytes */
+#define AUTH_PAKKEYLEN   32      /* PAK session key (pakkey from authpak_finish) */
+#define AUTH_TICKREQLEN  (1+AUTH_ANAMELEN+AUTH_DOMLEN+AUTH_CHALLEN+AUTH_ANAMELEN+AUTH_ANAMELEN)  /* 141 */
+#define AUTH_MAXTICKETLEN (12+AUTH_CHALLEN+2*AUTH_ANAMELEN+AUTH_NONCELEN+16) /* 124 */
+#define AUTH_MAXAUTHENTLEN (12+AUTH_CHALLEN+AUTH_NONCELEN+16)                /* 68 */
+#define AUTH_FORM1HDRLEN 12      /* form1 nonce header length (sig[8]+counter[4]) */
 #define AUTH_FORM1MACLEN 16      /* ChaCha20-Poly1305 MAC length */
 #define AUTH_MAXKEYLEN   256     /* Maximum key password length */
 
@@ -132,14 +140,16 @@ typedef struct Ticketreq {
 
 /*
  * Ticket structure (from 9front authsrv.h)
- * For dp9ik: key stores PAK shared secret Kn (32 bytes)
+ * form=0: DES encrypted (p9sk1), key=DESKEYLEN=7
+ * form=1: ChaCha20-Poly1305 encrypted (dp9ik), key=NONCELEN=32
  */
 typedef struct Ticket {
-    char num;                   /* Replay protection */
-    char chal[AUTH_CHALLEN];    /* Server challenge */
-    char cuid[AUTH_ANAMELEN];   /* Client uid */
-    char suid[AUTH_ANAMELEN];   /* Server uid */
-    unsigned char key[AUTH_PAKKEYLEN]; /* PAK shared secret Kn (32 bytes for dp9ik) */
+    char num;                      /* Replay protection */
+    char chal[AUTH_CHALLEN];       /* Server challenge */
+    char cuid[AUTH_ANAMELEN];      /* Client uid */
+    char suid[AUTH_ANAMELEN];      /* Server uid */
+    unsigned char key[AUTH_NONCELEN]; /* Nonce key (32 bytes for form=1) */
+    char form;                     /* Encoding format: 0=DES, 1=ccpoly (not transmitted) */
 } Ticket;
 
 /*
@@ -152,15 +162,25 @@ typedef struct Authenticator {
 } Authenticator;
 
 /*
- * Form1 encrypted message format (for dp9ik)
- * Used for encrypted authenticators with ChaCha20-Poly1305
+ * Authkey: password-derived key material for dp9ik PAK exchange.
+ * Matches Plan 9 authsrv.h Authkey exactly.
  */
-typedef struct Form1Msg {
-    char num;                       /* Message type (AuthAc, AuthAs, etc.) */
-    char sig[8];                    /* Signature "form1 xxx" */
-    unsigned char nonce[12];        /* ChaCha20 nonce */
-    unsigned char mac[16];          /* Poly1305 MAC */
-} Form1Msg;
+typedef struct Authkey {
+    char  des[AUTH_DESKEYLEN];       /* DES key from password (p9sk1) */
+    unsigned char aes[AUTH_AESKEYLEN]; /* AES key: PBKDF2-SHA1(pw,"Plan 9 key derivation") */
+    unsigned char pakkey[AUTH_PAKKEYLEN]; /* Shared key from authpak_finish() */
+    unsigned char pakhash[AUTH_PAKHASHLEN]; /* PM+PN blinding points from authpak_hash() */
+} Authkey;
+
+/*
+ * PAKpriv: private state for one side of the PAK exchange.
+ * Matches Plan 9 authsrv.h PAKpriv exactly.
+ */
+typedef struct PAKpriv {
+    int isclient;              /* 1=client role, 0=server role */
+    unsigned char x[AUTH_PAKXLEN];  /* Private scalar (56 bytes) */
+    unsigned char y[AUTH_PAKYLEN];  /* Our Decaf-encoded blinded public key */
+} PAKpriv;
 
 /*
  * Maximum number of keys

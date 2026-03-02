@@ -89,166 +89,103 @@ void p9sk1_des_set_parity(unsigned char *key, size_t len)
 }
 
 /*
- * Convert password to DES key
- * Algorithm: MD5(password + username) → extract 7 bytes → add parity → 8 byte DES key
+ * Expand Plan 9 7-byte compact DES key to 8-byte DES key.
+ * Plan 9 stores DES keys as 56 bits packed without parity bits.
+ * OpenSSL expects 8 bytes where each byte has 7 key bits (MSBs) + 1 parity bit (LSB).
+ * The 56 key bits are distributed 7 bits per byte: k8[d] bits 7..1 = k7 bits d*7..(d*7+6).
+ */
+static void expand_des_key7to8(const unsigned char *k7, unsigned char *k8)
+{
+    int d, b;
+    int src_idx;
+
+    memset(k8, 0, 8);
+    for (d = 0; d < 8; d++) {
+        for (b = 0; b < 7; b++) {
+            src_idx = d * 7 + b;
+            if (k7[src_idx / 8] & (0x80 >> (src_idx % 8))) {
+                k8[d] |= (0x80 >> b);
+            }
+        }
+        /* bit 0 (LSB) is left as 0 — DES_set_odd_parity will correct it */
+    }
+}
+
+/*
+ * Convert password to DES key using Plan 9's passtokey algorithm.
+ * From Plan 9 libc/port/passtokey.c:
+ *   XOR-cycle each password byte into a 7-byte buffer (no username, no hashing).
+ * The 7-byte compact key is then expanded to the 8-byte DES format OpenSSL expects.
  */
 int p9sk1_passtokey(const char *password, const char *username,
                     unsigned char *des_key, size_t keylen)
 {
-    unsigned char hash[MD5_DIGEST_LENGTH];
-    char *combined;
-    size_t pwlen, ulen, combined_len;
-    size_t i;
+    unsigned char k7[7];
+    int i;
+    const char *p;
+
+    (void)username; /* Plan 9's passtokey does not use the username */
 
     if (password == NULL || des_key == NULL || keylen < P9SK1_KEYLEN) {
         return -1;
     }
 
-    pwlen = strlen(password);
-    ulen = (username != NULL) ? strlen(username) : 0;
-
-    /* Combine password + username */
-    combined_len = pwlen + ulen;
-    combined = (char *)malloc(combined_len);
-    if (combined == NULL) {
-        return -1;
+    /* XOR-cycle password bytes into 7-byte buffer */
+    memset(k7, 0, sizeof(k7));
+    for (p = password, i = 0; *p != '\0'; p++, i++) {
+        k7[i % 7] ^= (unsigned char)*p;
     }
 
-    memcpy(combined, password, pwlen);
-    if (username != NULL && ulen > 0) {
-        memcpy(combined + pwlen, username, ulen);
-    }
+    /* Expand to 8-byte OpenSSL DES key format */
+    expand_des_key7to8(k7, des_key);
 
-    /* Compute MD5 hash */
-    md5_hash((unsigned char *)combined, combined_len, hash);
-    free(combined);
+    /* Zero the intermediate key material */
+    memset(k7, 0, sizeof(k7));
 
-    /* Extract first 7 bytes for DES key material */
-    memset(des_key, 0, keylen);
-    for (i = 0; i < 7 && i < keylen; i++) {
-        des_key[i] = hash[i];
-    }
-
-    /* Set odd parity on the 8-byte key */
+    /* Set odd parity on each byte (bit 0) */
     p9sk1_des_set_parity(des_key, P9SK1_KEYLEN);
 
-    fprintf(stderr, "p9sk1: derived DES key from password\n");
+    fprintf(stderr, "p9sk1: derived DES key from password (Plan 9 passtokey)\n");
 
     return 0;
 }
 
 /*
- * Find password key from factotum
- * Looks up proto=p9sk1 key in /mnt/factotum/ctl
+ * Find password key from the in-memory factotum key store.
+ * Loaded from /etc/marrow/keys at startup via factotum_load_keys().
  */
 char *p9sk1_find_password(const char *user, const char *dom)
 {
-    FILE *fp;
-    char line[512];
-    char *password = NULL;
-    static const char factotum_path[] = "/mnt/factotum/ctl";
+    FactotumKey *key;
+    const char *pw;
+    char *result;
+    size_t pwlen;
 
     if (user == NULL) {
         fprintf(stderr, "p9sk1_find_password: NULL user\n");
         return NULL;
     }
 
-    fp = fopen(factotum_path, "r");
-    if (fp == NULL) {
-        fprintf(stderr, "p9sk1_find_password: cannot open %s\n", factotum_path);
+    key = factotum_find_key("p9sk1", dom, user);
+    if (key == NULL) {
+        fprintf(stderr, "p9sk1_find_password: no key for user=%s dom=%s\n",
+                user, dom ? dom : "*");
         return NULL;
     }
 
-    /* Read keys from factotum */
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        char *proto, *ptr, *pw_start, *pw_end;
-        char line_user[AUTH_ANAMELEN];
-        char line_dom[AUTH_DOMLEN];
-
-        /* Skip comments and empty lines */
-        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
-            continue;
-        }
-
-        /* Check for p9sk1 protocol */
-        proto = strstr(line, "proto=p9sk1");
-        if (proto == NULL) {
-            continue;
-        }
-
-        /* Extract user from key */
-        ptr = strstr(line, "user=");
-        if (ptr != NULL) {
-            ptr += 5;
-            strncpy(line_user, ptr, AUTH_ANAMELEN - 1);
-            line_user[AUTH_ANAMELEN - 1] = '\0';
-            /* Null-terminate at space or newline */
-            for (ptr = line_user; *ptr && *ptr != ' ' && *ptr != '\n' && *ptr != '\r'; ptr++) {
-                /* Continue */
-            }
-            *ptr = '\0';
-        } else {
-            continue;
-        }
-
-        /* Check if user matches */
-        if (strcmp(line_user, user) != 0) {
-            continue;
-        }
-
-        /* Extract domain (optional for p9sk1) */
-        if (dom != NULL) {
-            ptr = strstr(line, "dom=");
-            if (ptr != NULL) {
-                ptr += 4;
-                strncpy(line_dom, ptr, AUTH_DOMLEN - 1);
-                line_dom[AUTH_DOMLEN - 1] = '\0';
-                /* Null-terminate at space or newline */
-                for (ptr = line_dom; *ptr && *ptr != ' ' && *ptr != '\n' && *ptr != '\r'; ptr++) {
-                    /* Continue */
-                }
-                *ptr = '\0';
-
-                if (strcmp(line_dom, dom) != 0) {
-                    continue;
-                }
-            }
-        }
-
-        /* Extract password (marked with !password=) */
-        pw_start = strstr(line, "!password=");
-        if (pw_start == NULL) {
-            pw_start = strstr(line, "password=");
-            if (pw_start == NULL) {
-                continue;
-            }
-            pw_start += 9;  /* "password=" */
-        } else {
-            pw_start += 10; /* "!password=" */
-        }
-
-        /* Find end of password (space, newline, or carriage return) */
-        pw_end = pw_start;
-        while (*pw_end && *pw_end != ' ' && *pw_end != '\n' && *pw_end != '\r') {
-            pw_end++;
-        }
-
-        /* Allocate and copy password */
-        password = (char *)malloc(pw_end - pw_start + 1);
-        if (password == NULL) {
-            fclose(fp);
-            return NULL;
-        }
-
-        memcpy(password, pw_start, pw_end - pw_start);
-        password[pw_end - pw_start] = '\0';
-
-        fprintf(stderr, "p9sk1: found password for user=%s\n", user);
-        break;
+    pw = factotum_get_attr(key->privattr, "password");
+    if (pw == NULL) {
+        fprintf(stderr, "p9sk1_find_password: key has no !password attr\n");
+        return NULL;
     }
 
-    fclose(fp);
-    return password;
+    pwlen = strlen(pw);
+    result = (char *)malloc(pwlen + 1);
+    if (result == NULL) return NULL;
+    memcpy(result, pw, pwlen + 1);
+
+    fprintf(stderr, "p9sk1: found password for user=%s\n", user);
+    return result;
 }
 
 #ifdef USE_OPENSSL

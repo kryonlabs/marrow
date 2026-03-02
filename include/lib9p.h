@@ -309,4 +309,13 @@ ssize_t devdraw_refresh_read(char *buf, size_t count, uint64_t offset, void *dat
 int process_draw_messages(DrawConnection *conn, const char *buf, size_t count,
                           char *response, int *resp_len);
 
+/*
+ * /dev/audio implementation (9front compatible)
+ */
+int devaudio_init(P9Node *dev_dir);
+ssize_t devaudio_read(char *buf, size_t count, uint64_t offset);
+ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset);
+ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset);
+ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset);
+
 #endif /* LIB9P_H */

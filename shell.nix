@@ -17,6 +17,10 @@ pkgs.mkShell {
     # Math library
     glibc.dev
 
+    # ALSA for audio device (/dev/audio)
+    alsa-lib
+    alsa-lib.dev
+
     # Testing Tools (provides 9mount, 9p, etc.)
     plan9port
 
