@@ -112,6 +112,7 @@ typedef struct {
 /*
  * Tree node structure
  */
+#define P9NODE_DECLARED
 typedef struct P9Node {
     char            *name;
     P9Qid           qid;

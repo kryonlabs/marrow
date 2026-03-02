@@ -347,9 +347,6 @@ size_t handle_twalk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
         return p9_build_rerror(out_buf, hdr.tag, "invalid Twalk");
     }
 
-    fprintf(stderr, "handle_twalk: fid=%u newfid=%u nwname=%d (current_client_fd=%d)\n",
-            fid, newfid, nwname, current_client_fd);
-
     /* Get source FID */
     fid_obj = fid_get(fid);
     if (fid_obj == NULL) {

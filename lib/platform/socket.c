@@ -27,6 +27,7 @@ int tcp_listen(int port)
 {
     int fd;
     struct sockaddr_in6 addr;
+    struct sockaddr_in addr4;
     int reuse = 1;
     int ipv6only = 0;
 
@@ -42,7 +43,6 @@ int tcp_listen(int port)
         }
 
         /* IPv4 fallback */
-        struct sockaddr_in addr4;
         memset(&addr4, 0, sizeof(addr4));
         addr4.sin_family = AF_INET;
         addr4.sin_addr.s_addr = INADDR_ANY;

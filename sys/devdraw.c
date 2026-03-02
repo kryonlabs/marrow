@@ -1268,9 +1268,7 @@ void drawconn_mark_dirty_all(void)
         }
     }
 
-    if (count > 0) {
-        fprintf(stderr, "drawconn_mark_dirty_all: marking %d connections dirty\n", count);
-    }
+    (void)count;
 }
 
 /*

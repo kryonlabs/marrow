@@ -15,9 +15,18 @@ ifneq ($(NIX_LDFLAGS),)
     CC = gcc
     LDFLAGS += $(shell echo '$(NIX_LDFLAGS)' | perl -pe 's/-rpath (\S+)/-Wl,-rpath,$1/g')
     CFLAGS += $(NIX_CFLAGS_COMPILE)
-    CFLAGS += -DUSE_OPENSSL
-    LDFLAGS += -lcrypto
     $(info Building in Nix environment - using GCC)
+endif
+
+# Detect OpenSSL via pkg-config (works in Nix and non-Nix environments)
+OPENSSL_CFLAGS := $(shell pkg-config --cflags openssl 2>/dev/null)
+OPENSSL_LIBS   := $(shell pkg-config --libs   openssl 2>/dev/null)
+ifneq ($(OPENSSL_LIBS),)
+    CFLAGS  += -DUSE_OPENSSL $(OPENSSL_CFLAGS)
+    LDFLAGS += $(OPENSSL_LIBS)
+    $(info OpenSSL found via pkg-config - authentication enabled)
+else
+    $(info OpenSSL not found - authentication disabled)
 endif
 
 # Directories
