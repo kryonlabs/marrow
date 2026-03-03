@@ -195,11 +195,13 @@ int64_t p9sys_gateway(PEB *peb, int syscall_num, uint64_t *args)
             break;
 
         case P9_SYS_PREAD:
-            result = p9sys_pread(peb, (int)args[0], (void *)args[1], (int)args[2]);
+            result = p9sys_pread(peb, (int)args[0], (void *)args[1],
+                                 (int)args[2], (int64_t)args[3]);
             break;
 
         case P9_SYS_PWRITE:
-            result = p9sys_pwrite(peb, (int)args[0], (const void *)args[1], (int)args[2]);
+            result = p9sys_pwrite(peb, (int)args[0], (const void *)args[1],
+                                  (int)args[2], (int64_t)args[3]);
             break;
 
         case P9_SYS_CLOSE:
@@ -234,6 +236,10 @@ int64_t p9sys_gateway(PEB *peb, int syscall_num, uint64_t *args)
                                 (int)args[2], (const char *)args[3]);
             break;
 
+        case P9_SYS_CHDIR:
+            result = p9sys_chdir(peb, (const char *)args[0]);
+            break;
+
         /* Pipe */
         case P9_SYS_PIPE:
             result = p9sys_pipe(peb, (int *)args[0]);
@@ -254,6 +260,14 @@ int64_t p9sys_gateway(PEB *peb, int syscall_num, uint64_t *args)
 
         case P9_SYS_RFORK:
             result = p9sys_rfork(peb, (int)args[0]);
+            break;
+
+        case P9_SYS_EXEC:
+            result = p9sys_exec(peb, (const char *)args[0], (char **)args[1]);
+            break;
+
+        case P9_SYS_ALARM:
+            result = p9sys_alarm(peb, (uint32_t)args[0]);
             break;
 
         /* FD operations */
@@ -309,9 +323,117 @@ int64_t p9sys_gateway(PEB *peb, int syscall_num, uint64_t *args)
             result = p9sys_rendezvous(peb, (uint64_t)args[0], (uint64_t)args[1]);
             break;
 
+        case P9_SYS_SEMACQUIRE:
+            result = p9sys_semacquire(peb, (int *)args[0], (int)args[1]);
+            break;
+
+        case P9_SYS_SEMRELEASE:
+            result = p9sys_semrelease(peb, (int *)args[0], (int)args[1]);
+            break;
+
+        case P9_SYS_TSEMACQUIRE:
+            result = p9sys_tsemacquire(peb, (int *)args[0], (uint32_t)args[1]);
+            break;
+
+        /* Note (signal) system */
+        case P9_SYS_NOTIFY:
+            result = p9sys_notify(peb, (void *)args[0]);
+            break;
+
+        case P9_SYS_NOTED:
+            result = p9sys_noted(peb, (int)args[0]);
+            break;
+
+        case P9_SYS_AWAIT:
+            result = p9sys_await(peb, (char *)args[0], (int)args[1]);
+            break;
+
+        /* Error string */
+        case P9_SYS_ERRSTR:
+            result = p9sys_errstr(peb, (char *)args[0], (int)args[1]);
+            break;
+
+        /* Authentication stubs */
+        case P9_SYS_FAUTH:
+            p9_set_errstr("fauth: not implemented");
+            result = -1;
+            break;
+
+        case P9_SYS_FVERSION:
+            p9_set_errstr("fversion: not implemented");
+            result = -1;
+            break;
+
+        /* Deprecated syscalls — forwarded to modern equivalents */
+        case P9_SYS_SYSR1:
+            result = 0;
+            break;
+
+        case P9_SYS__ERRSTR:
+            result = p9sys_errstr(peb, (char *)args[0], 64);
+            break;
+
+        case P9_SYS__FSESSION:
+            p9_set_errstr("fsession: deprecated");
+            result = -1;
+            break;
+
+        case P9_SYS__FSTAT:
+            result = p9sys_fstat(peb, (int)args[0], (uint8_t *)args[1],
+                                 (int)args[2]);
+            break;
+
+        case P9_SYS_SEGBRK:
+            result = p9sys_brk(peb, (void *)args[0]);
+            break;
+
+        case P9_SYS__MOUNT:
+            p9_set_errstr("mount: deprecated, use mount(46)");
+            result = -1;
+            break;
+
+        case P9_SYS__READ:
+            result = p9sys_pread(peb, (int)args[0], (void *)args[1],
+                                 (int)args[2], P9_NOSEEK);
+            break;
+
+        case P9_SYS_OSEEK:
+            result = p9sys_seek(peb, (int)args[0], (int64_t)args[1], (int)args[2]);
+            break;
+
+        case P9_SYS__STAT:
+            result = p9sys_stat(peb, (const char *)args[0], (uint8_t *)args[1],
+                                (int)args[2]);
+            break;
+
+        case P9_SYS__WRITE:
+            result = p9sys_pwrite(peb, (int)args[0], (const void *)args[1],
+                                  (int)args[2], P9_NOSEEK);
+            break;
+
+        case P9_SYS__WSTAT:
+            result = p9sys_wstat(peb, (const char *)args[0], (uint8_t *)args[1],
+                                 (int)args[2]);
+            break;
+
+        case P9_SYS__FWSTAT:
+            result = p9sys_fwstat(peb, (int)args[0], (uint8_t *)args[1],
+                                  (int)args[2]);
+            break;
+
+        case P9_SYS__WAIT:
+            p9_set_errstr("wait: deprecated");
+            result = -1;
+            break;
+
+        case P9_SYS__NSEC:
+            result = p9sys_nsec(peb);
+            break;
+
         default:
             fprintf(stderr, "p9sys_gateway: unimplemented syscall %d\n",
                     syscall_num);
+            p9_set_errstr("unimplemented syscall");
             result = -1;
             break;
     }
@@ -382,14 +504,14 @@ int64_t p9sys_open(PEB *peb, const char *path, int mode)
 
 /*
  * Syscall: pread
- * Positional read
+ * Positional read — if offset == P9_NOSEEK, use current fd offset and advance.
  */
-int64_t p9sys_pread(PEB *peb, int fd, void *buf, int count)
+int64_t p9sys_pread(PEB *peb, int fd, void *buf, int count, int64_t offset)
 {
     P9FdEntry *fd_entry;
     int64_t result;
     P9Node *node;
-    uint64_t offset;
+    int use_seek;
 
     if (peb == NULL || buf == NULL) {
         return -1;
@@ -402,25 +524,31 @@ int64_t p9sys_pread(PEB *peb, int fd, void *buf, int count)
     }
 
     node = (P9Node *)fd_entry->node_ptr;
+    use_seek = (offset == P9_NOSEEK);
+
+    if (fd == 0 && node == NULL) {
+        /* stdin with no 9P node — read from host stdin */
+        result = read(0, buf, (size_t)count);
+        if (result > 0) {
+            fd_entry->offset += (uint64_t)result;
+        }
+        return result;
+    }
+
     if (node == NULL) {
         p9_set_errstr("pread: no file attached");
         return -1;
     }
 
-    offset = fd_entry->offset;
-
-    /* TODO: Implement proper 9P read operation */
-    /* For now, handle stdin/stdout/stderr specially */
-    if (fd == 0) {
-        /* stdin - read from host stdin */
-        result = read(0, buf, count);
+    if (use_seek) {
+        /* Use current position and advance after read */
+        result = node_read(node, (char *)buf, (size_t)count, fd_entry->offset);
         if (result > 0) {
-            fd_entry->offset += result;
+            fd_entry->offset += (uint64_t)result;
         }
     } else {
-        /* TODO: Read from 9P node */
-        result = 0;  /* EOF */
-        fprintf(stderr, "p9sys_pread: fd=%d count=%d (not implemented)\n", fd, count);
+        /* Positional read — do not advance fd_entry->offset */
+        result = node_read(node, (char *)buf, (size_t)count, (uint64_t)offset);
     }
 
     return result;
@@ -428,12 +556,14 @@ int64_t p9sys_pread(PEB *peb, int fd, void *buf, int count)
 
 /*
  * Syscall: pwrite
- * Positional write
+ * Positional write — if offset == P9_NOSEEK, use current fd offset and advance.
  */
-int64_t p9sys_pwrite(PEB *peb, int fd, const void *buf, int count)
+int64_t p9sys_pwrite(PEB *peb, int fd, const void *buf, int count, int64_t offset)
 {
     P9FdEntry *fd_entry;
     int64_t result;
+    P9Node *node;
+    int use_seek;
 
     if (peb == NULL || buf == NULL) {
         return -1;
@@ -445,19 +575,34 @@ int64_t p9sys_pwrite(PEB *peb, int fd, const void *buf, int count)
         return -1;
     }
 
-    /* Handle stdout/stderr specially */
-    if (fd == 1) {
-        result = write(1, buf, count);
-    } else if (fd == 2) {
-        result = write(2, buf, count);
-    } else {
-        /* TODO: Write to 9P node */
-        result = count;
-        fprintf(stderr, "p9sys_pwrite: fd=%d count=%d (not implemented)\n", fd, count);
+    node = (P9Node *)fd_entry->node_ptr;
+    use_seek = (offset == P9_NOSEEK);
+
+    if ((fd == 1 || fd == 2) && node == NULL) {
+        /* stdout/stderr with no 9P node — write to host */
+        result = write(fd, buf, (size_t)count);
+        if (result > 0) {
+            fd_entry->offset += (uint64_t)result;
+        }
+        return result;
     }
 
-    if (result > 0) {
-        fd_entry->offset += result;
+    if (node == NULL) {
+        p9_set_errstr("pwrite: no file attached");
+        return -1;
+    }
+
+    if (use_seek) {
+        /* Use current position and advance after write */
+        result = node_write(node, (const char *)buf, (size_t)count,
+                            fd_entry->offset);
+        if (result > 0) {
+            fd_entry->offset += (uint64_t)result;
+        }
+    } else {
+        /* Positional write — do not advance fd_entry->offset */
+        result = node_write(node, (const char *)buf, (size_t)count,
+                            (uint64_t)offset);
     }
 
     return result;
@@ -701,13 +846,40 @@ int64_t p9sys_exits(PEB *peb, const char *msg)
 
 /*
  * Syscall: brk
+ * Extend the data/bss segment to the given address.
  */
 int64_t p9sys_brk(PEB *peb, void *addr)
 {
-    /* TODO: Implement memory management */
-    fprintf(stderr, "p9sys_brk: addr=%p\n", addr);
+    void *result;
+    uintptr_t new_brk;
+    uintptr_t cur_brk;
 
-    /* For now, always succeed */
+    if (peb == NULL) {
+        return -1;
+    }
+
+    if (addr == NULL) {
+        return 0;
+    }
+
+    /* Ask Linux to set the program break */
+    new_brk = (uintptr_t)addr;
+    result = (void *)syscall(SYS_brk, new_brk);
+    cur_brk = (uintptr_t)result;
+
+    if (cur_brk < new_brk) {
+        p9_set_errstr("brk: out of memory");
+        return -1;
+    }
+
+    /* Update bss segment size tracking */
+    if (peb->bss.base != NULL) {
+        uintptr_t base = (uintptr_t)peb->bss.base;
+        if (cur_brk > base) {
+            peb->bss.size = (uint32_t)(cur_brk - base);
+        }
+    }
+
     return 0;
 }
 
@@ -728,19 +900,44 @@ int64_t p9sys_sleep(PEB *peb, int milliseconds)
 
 /*
  * Syscall: rfork
+ * Creates or modifies a process (plan9 fork with namespace flags).
  */
 int64_t p9sys_rfork(PEB *peb, int flags)
 {
+    pid_t pid;
+
     if (peb == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper forking */
-    /* For now, return error - not yet implemented */
-    fprintf(stderr, "p9sys_rfork: flags=0x%x (not implemented)\n", flags);
+    if (flags & P9_RFPROC) {
+        /* Actual fork */
+        pid = fork();
+        if (pid < 0) {
+            p9_set_errstr("rfork: fork failed");
+            return -1;
+        }
+        /* Both parent and child record the flags */
+        peb->rfork_flags |= flags;
+        return (int64_t)pid;
+    }
 
-    p9_set_errstr("rfork: not implemented");
-    return -1;
+    if (flags & P9_RFMEM) {
+        /* Share address space — complex, not yet implemented */
+        p9_set_errstr("rfork: RFMEM not implemented");
+        return -1;
+    }
+
+    /* Namespace/group flags without RFPROC: just record and succeed */
+    if (flags & (P9_RFNAMEG | P9_RFENVG | P9_RFFDG |
+                 P9_RFNOTEG | P9_RFNOWAIT)) {
+        peb->rfork_flags |= flags;
+        return 0;
+    }
+
+    /* Unknown flags — succeed silently */
+    peb->rfork_flags |= flags;
+    return 0;
 }
 
 /*
@@ -790,11 +987,66 @@ int64_t p9sys_dup(PEB *peb, int fd, int newfd)
 }
 
 /*
+ * Build a path string by walking the P9Node parent chain.
+ * Returns the length written (without null terminator).
+ */
+static int p9_build_nodepath(P9Node *node, char *buf, int nbuf)
+{
+    const char *parts[64];
+    int nparts = 0;
+    P9Node *n;
+    char *p;
+    int i, len, partlen;
+
+    n = node;
+    while (n != NULL && nparts < 64) {
+        if (n->name != NULL && n->name[0] != '\0' &&
+            strcmp(n->name, "/") != 0) {
+            parts[nparts++] = n->name;
+        }
+        if (n->parent == NULL || n->parent == n) {
+            break;
+        }
+        n = n->parent;
+    }
+
+    /* Build path in reverse (parts[nparts-1] is root component) */
+    p = buf;
+    len = 0;
+
+    if (len + 1 >= nbuf) {
+        buf[0] = '\0';
+        return 0;
+    }
+    *p++ = '/';
+    len = 1;
+
+    for (i = nparts - 1; i >= 0; i--) {
+        partlen = (int)strlen(parts[i]);
+        /* Add '/' separator before each component after the first */
+        if (i < nparts - 1) {
+            if (len + 1 >= nbuf) break;
+            *p++ = '/';
+            len++;
+        }
+        if (len + partlen >= nbuf) break;
+        memcpy(p, parts[i], (size_t)partlen);
+        p += partlen;
+        len += partlen;
+    }
+
+    *p = '\0';
+    return len;
+}
+
+/*
  * Syscall: fd2path
  */
 int64_t p9sys_fd2path(PEB *peb, int fd, char *buf, int nbuf)
 {
     P9FdEntry *fd_entry;
+    P9Node *node;
+    int len;
 
     if (peb == NULL || buf == NULL || nbuf <= 0) {
         return -1;
@@ -806,11 +1058,194 @@ int64_t p9sys_fd2path(PEB *peb, int fd, char *buf, int nbuf)
         return -1;
     }
 
-    /* TODO: Get actual path from node */
-    /* For now, return a placeholder */
-    snprintf(buf, nbuf, "/dev/fd/%d", fd);
+    node = (P9Node *)fd_entry->node_ptr;
+    if (node == NULL) {
+        /* No 9P node — return well-known names for std fds */
+        if (fd == 0) {
+            strncpy(buf, "/dev/stdin", (size_t)nbuf);
+        } else if (fd == 1) {
+            strncpy(buf, "/dev/stdout", (size_t)nbuf);
+        } else if (fd == 2) {
+            strncpy(buf, "/dev/stderr", (size_t)nbuf);
+        } else {
+            snprintf(buf, (size_t)nbuf, "/dev/fd/%d", fd);
+        }
+        buf[nbuf - 1] = '\0';
+        return (int64_t)strlen(buf);
+    }
 
-    return strlen(buf);
+    len = p9_build_nodepath(node, buf, nbuf);
+    return (int64_t)len;
+}
+
+/*
+ * Pack a P9Node into Plan 9 stat wire format:
+ *   size[2] type[2] dev[4] qid[13] mode[4] atime[4] mtime[4]
+ *   length[8] name[s] uid[s] gid[s] muid[s]
+ *
+ * The leading size[2] field contains the byte count of the remainder.
+ * Returns total bytes written, or -1 if buf is too small.
+ */
+static int64_t p9_pack_node_stat(P9Node *node, uint8_t *buf, int nbuf)
+{
+    const char *name;
+    const char *uid  = "none";
+    const char *gid  = "none";
+    const char *muid = "";
+    int namelen, uidlen, gidlen, muidlen;
+    int statlen, totallen;
+    uint8_t *p;
+
+    name    = (node->name != NULL) ? node->name : "";
+    namelen = (int)strlen(name);
+    uidlen  = (int)strlen(uid);
+    gidlen  = (int)strlen(gid);
+    muidlen = (int)strlen(muid);
+
+    /*
+     * Fixed-size stat body (excluding the leading size[2] and strings):
+     *   type[2] dev[4] qid[13] mode[4] atime[4] mtime[4] length[8] = 39 bytes
+     * String headers: 4 * 2-byte length prefix = 8 bytes
+     * Strings: namelen + uidlen + gidlen + muidlen bytes
+     */
+    statlen  = 2 + 4 + 13 + 4 + 4 + 4 + 8  /* fixed fields */
+             + 2 + namelen
+             + 2 + uidlen
+             + 2 + gidlen
+             + 2 + muidlen;
+    totallen = 2 + statlen;   /* leading size[2] + body */
+
+    if (nbuf < totallen) {
+        p9_set_errstr("stat: buffer too small");
+        return -1;
+    }
+
+    p = buf;
+
+    /* size[2] — byte count of everything after this field */
+    le_put16(p, (uint16_t)statlen); p += 2;
+
+    /* type[2] */
+    le_put16(p, 0); p += 2;
+
+    /* dev[4] */
+    le_put32(p, 0); p += 4;
+
+    /* qid: type[1] vers[4] path[8] */
+    *p++ = node->qid.type;
+    le_put32(p, node->qid.version); p += 4;
+    le_put64(p, node->qid.path);    p += 8;
+
+    /* mode[4] */
+    le_put32(p, node->mode); p += 4;
+
+    /* atime[4] */
+    le_put32(p, node->atime); p += 4;
+
+    /* mtime[4] */
+    le_put32(p, node->mtime); p += 4;
+
+    /* length[8] */
+    le_put64(p, node->length); p += 8;
+
+    /* name[s] */
+    le_put16(p, (uint16_t)namelen); p += 2;
+    memcpy(p, name, (size_t)namelen); p += namelen;
+
+    /* uid[s] */
+    le_put16(p, (uint16_t)uidlen); p += 2;
+    memcpy(p, uid, (size_t)uidlen); p += uidlen;
+
+    /* gid[s] */
+    le_put16(p, (uint16_t)gidlen); p += 2;
+    memcpy(p, gid, (size_t)gidlen); p += gidlen;
+
+    /* muid[s] */
+    le_put16(p, (uint16_t)muidlen); p += 2;
+    memcpy(p, muid, (size_t)muidlen); p += muidlen;
+
+    (void)p; /* suppress unused warning */
+    return (int64_t)totallen;
+}
+
+/*
+ * Unpack a Plan 9 stat wire buffer into a P9Node (for wstat/fwstat).
+ * Only updates fields that are not set to their "don't change" sentinel.
+ * Returns 0 on success, -1 on parse error.
+ */
+static int p9_unpack_stat_to_node(const uint8_t *buf, int nbuf, P9Node *node)
+{
+    const uint8_t *p;
+    uint32_t mode, atime, mtime;
+    uint64_t length;
+    uint16_t nameLen;
+    char name[P9_MAX_STR];
+
+    if (nbuf < 2) {
+        return -1;
+    }
+
+    /* Skip size[2] */
+    p = buf + 2;
+
+    /* type[2] dev[4] */
+    if (p + 6 > buf + nbuf) return -1;
+    p += 6;
+
+    /* qid[13] */
+    if (p + 13 > buf + nbuf) return -1;
+    p += 13;
+
+    /* mode[4] */
+    if (p + 4 > buf + nbuf) return -1;
+    mode = le_get32(p); p += 4;
+
+    /* atime[4] */
+    if (p + 4 > buf + nbuf) return -1;
+    atime = le_get32(p); p += 4;
+
+    /* mtime[4] */
+    if (p + 4 > buf + nbuf) return -1;
+    mtime = le_get32(p); p += 4;
+
+    /* length[8] */
+    if (p + 8 > buf + nbuf) return -1;
+    length = le_get64(p); p += 8;
+
+    /* name[s] */
+    if (p + 2 > buf + nbuf) return -1;
+    nameLen = le_get16(p); p += 2;
+    if (p + nameLen > buf + nbuf) return -1;
+    if (nameLen > 0 && nameLen < P9_MAX_STR) {
+        memcpy(name, p, (size_t)nameLen);
+        name[nameLen] = '\0';
+        /* Don't rename root ("/") */
+        if (name[0] != '\0' && strcmp(name, "/") != 0 && node->parent != NULL) {
+            free(node->name);
+            node->name = (char *)malloc((size_t)nameLen + 1);
+            if (node->name != NULL) {
+                memcpy(node->name, name, (size_t)nameLen + 1);
+            }
+        }
+    }
+    p += nameLen;
+
+    /* Apply numeric fields if not the "don't change" sentinel */
+    if (mode != 0xFFFFFFFFU) {
+        node->mode = mode;
+    }
+    if (atime != 0xFFFFFFFFU) {
+        node->atime = atime;
+    }
+    if (mtime != 0xFFFFFFFFU) {
+        node->mtime = mtime;
+    }
+    if (length != (uint64_t)-1LL) {
+        node->length = length;
+    }
+
+    (void)p;
+    return 0;
 }
 
 /*
@@ -818,15 +1253,19 @@ int64_t p9sys_fd2path(PEB *peb, int fd, char *buf, int nbuf)
  */
 int64_t p9sys_stat(PEB *peb, const char *path, uint8_t *buf, int nbuf)
 {
+    P9Node *node;
+
     if (peb == NULL || path == NULL || buf == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper 9P stat operation */
-    fprintf(stderr, "p9sys_stat: path=%s (not implemented)\n", path);
+    node = tree_lookup(tree_root(), path);
+    if (node == NULL) {
+        p9_set_errstr("stat: file not found");
+        return -1;
+    }
 
-    p9_set_errstr("stat: not implemented");
-    return -1;
+    return p9_pack_node_stat(node, buf, nbuf);
 }
 
 /*
@@ -835,6 +1274,7 @@ int64_t p9sys_stat(PEB *peb, const char *path, uint8_t *buf, int nbuf)
 int64_t p9sys_fstat(PEB *peb, int fd, uint8_t *buf, int nbuf)
 {
     P9FdEntry *fd_entry;
+    P9Node *node;
 
     if (peb == NULL || buf == NULL) {
         return -1;
@@ -846,11 +1286,13 @@ int64_t p9sys_fstat(PEB *peb, int fd, uint8_t *buf, int nbuf)
         return -1;
     }
 
-    /* TODO: Implement proper 9P fstat operation */
-    fprintf(stderr, "p9sys_fstat: fd=%d (not implemented)\n", fd);
+    node = (P9Node *)fd_entry->node_ptr;
+    if (node == NULL) {
+        p9_set_errstr("fstat: no file attached");
+        return -1;
+    }
 
-    p9_set_errstr("fstat: not implemented");
-    return -1;
+    return p9_pack_node_stat(node, buf, nbuf);
 }
 
 /*
@@ -858,15 +1300,19 @@ int64_t p9sys_fstat(PEB *peb, int fd, uint8_t *buf, int nbuf)
  */
 int64_t p9sys_wstat(PEB *peb, const char *path, uint8_t *buf, int nbuf)
 {
+    P9Node *node;
+
     if (peb == NULL || path == NULL || buf == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper 9P wstat operation */
-    fprintf(stderr, "p9sys_wstat: path=%s (not implemented)\n", path);
+    node = tree_lookup(tree_root(), path);
+    if (node == NULL) {
+        p9_set_errstr("wstat: file not found");
+        return -1;
+    }
 
-    p9_set_errstr("wstat: not implemented");
-    return -1;
+    return (int64_t)p9_unpack_stat_to_node(buf, nbuf, node);
 }
 
 /*
@@ -875,6 +1321,7 @@ int64_t p9sys_wstat(PEB *peb, const char *path, uint8_t *buf, int nbuf)
 int64_t p9sys_fwstat(PEB *peb, int fd, uint8_t *buf, int nbuf)
 {
     P9FdEntry *fd_entry;
+    P9Node *node;
 
     if (peb == NULL || buf == NULL) {
         return -1;
@@ -886,29 +1333,62 @@ int64_t p9sys_fwstat(PEB *peb, int fd, uint8_t *buf, int nbuf)
         return -1;
     }
 
-    /* TODO: Implement proper 9P fwstat operation */
-    fprintf(stderr, "p9sys_fwstat: fd=%d (not implemented)\n", fd);
+    node = (P9Node *)fd_entry->node_ptr;
+    if (node == NULL) {
+        p9_set_errstr("fwstat: no file attached");
+        return -1;
+    }
 
-    p9_set_errstr("fwstat: not implemented");
-    return -1;
+    return (int64_t)p9_unpack_stat_to_node(buf, nbuf, node);
 }
 
 /*
  * Syscall: segattach
+ * Plan 9 attr flags: SG_RONLY=1, SG_NOEXEC=4
  */
-int64_t p9sys_segattach(PEB *peb, int type, const char *name,
-                       void *addr, uint64_t len)
+int64_t p9sys_segattach(PEB *peb, int attr, const char *name,
+                       void *va, uint64_t len)
 {
+    void *result;
+    int prot;
+    int i;
+
     if (peb == NULL) {
         return -1;
     }
 
-    /* TODO: Implement segment attachment */
-    fprintf(stderr, "p9sys_segattach: type=%d name=%s addr=%p len=%llu\n",
-            type, name ? name : "(null)", addr, (unsigned long long)len);
+    if (len == 0) {
+        p9_set_errstr("segattach: zero length");
+        return -1;
+    }
 
-    p9_set_errstr("segattach: not implemented");
-    return -1;
+    prot = PROT_READ | PROT_WRITE;
+    if (attr & 1) {
+        prot = PROT_READ;            /* SG_RONLY */
+    }
+    if (!(attr & 4)) {
+        prot |= PROT_EXEC;           /* not SG_NOEXEC → executable */
+    }
+
+    result = mmap(va, (size_t)len, prot,
+                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (result == MAP_FAILED) {
+        p9_set_errstr("segattach: mmap failed");
+        return -1;
+    }
+
+    /* Track in PEB so segdetach can find the length */
+    for (i = 0; i < P9_MAX_ATTACHED_SEGS; i++) {
+        if (!peb->attached_segs[i].active) {
+            peb->attached_segs[i].addr   = result;
+            peb->attached_segs[i].len    = len;
+            peb->attached_segs[i].active = 1;
+            break;
+        }
+    }
+
+    (void)name; /* segment class name not used in hosted env */
+    return (int64_t)(uintptr_t)result;
 }
 
 /*
@@ -916,36 +1396,53 @@ int64_t p9sys_segattach(PEB *peb, int type, const char *name,
  */
 int64_t p9sys_segdetach(PEB *peb, void *addr)
 {
+    int i;
+
     if (peb == NULL) {
         return -1;
     }
 
-    /* TODO: Implement segment detachment */
-    fprintf(stderr, "p9sys_segdetach: addr=%p\n", addr);
+    for (i = 0; i < P9_MAX_ATTACHED_SEGS; i++) {
+        if (peb->attached_segs[i].active &&
+            peb->attached_segs[i].addr == addr) {
+            munmap(addr, (size_t)peb->attached_segs[i].len);
+            peb->attached_segs[i].active = 0;
+            return 0;
+        }
+    }
 
-    p9_set_errstr("segdetach: not implemented");
+    p9_set_errstr("segdetach: segment not found");
     return -1;
 }
 
 /*
  * Syscall: segfree
+ * Frees a segment by address and length.
  */
 int64_t p9sys_segfree(PEB *peb, void *addr, uint64_t len)
 {
+    int i;
+
     if (peb == NULL) {
         return -1;
     }
 
-    /* TODO: Implement segment freeing */
-    fprintf(stderr, "p9sys_segfree: addr=%p len=%llu\n",
-            addr, (unsigned long long)len);
+    /* Remove from tracking table if present */
+    for (i = 0; i < P9_MAX_ATTACHED_SEGS; i++) {
+        if (peb->attached_segs[i].active &&
+            peb->attached_segs[i].addr == addr) {
+            peb->attached_segs[i].active = 0;
+            break;
+        }
+    }
 
-    p9_set_errstr("segfree: not implemented");
-    return -1;
+    munmap(addr, (size_t)len);
+    return 0;
 }
 
 /*
  * Syscall: segflush
+ * Flush dirty pages in a segment (write-back).  msync() is sufficient.
  */
 int64_t p9sys_segflush(PEB *peb, void *addr, uint64_t len)
 {
@@ -953,27 +1450,337 @@ int64_t p9sys_segflush(PEB *peb, void *addr, uint64_t len)
         return -1;
     }
 
-    /* TODO: Implement segment flushing */
-    fprintf(stderr, "p9sys_segflush: addr=%p len=%llu\n",
-            addr, (unsigned long long)len);
-
-    /* For now, just succeed - this is often a no-op */
+    msync(addr, (size_t)len, MS_SYNC);
     return 0;
 }
 
 /*
  * Syscall: rendezvous
+ * Two callers meet at the same tag; each gets the other's value.
+ * Uses a global table protected by a spinlock and per-slot futex.
  */
 int64_t p9sys_rendezvous(PEB *peb, uint64_t tag, uint64_t val)
+{
+    int i;
+    uint64_t their_val;
+
+    if (peb == NULL) {
+        return -1;
+    }
+
+    /* Acquire spinlock */
+    while (__sync_lock_test_and_set(&g_rendlock, 1)) {
+        /* spin */
+    }
+
+    /* Search for a waiter with matching tag */
+    for (i = 0; i < P9_REND_SIZE; i++) {
+        if (g_rendtable[i].active && g_rendtable[i].tag == tag) {
+            their_val = g_rendtable[i].val;
+            g_rendtable[i].val   = val;  /* hand our value to the waiter */
+            g_rendtable[i].futex = 0;    /* signal wakeup */
+            __sync_lock_release(&g_rendlock);
+            /* Wake the sleeping first caller */
+            syscall(SYS_futex, (int *)&g_rendtable[i].futex,
+                    FUTEX_WAKE, 1, NULL, NULL, 0);
+            return (int64_t)their_val;
+        }
+    }
+
+    /* No waiter found — become the first caller */
+    for (i = 0; i < P9_REND_SIZE; i++) {
+        if (!g_rendtable[i].active) {
+            g_rendtable[i].tag    = tag;
+            g_rendtable[i].val    = val;
+            g_rendtable[i].futex  = 1;
+            g_rendtable[i].active = 1;
+            __sync_lock_release(&g_rendlock);
+
+            /* Sleep until second caller sets futex = 0 */
+            while (__atomic_load_n((int *)&g_rendtable[i].futex,
+                                   __ATOMIC_SEQ_CST)) {
+                syscall(SYS_futex, (int *)&g_rendtable[i].futex,
+                        FUTEX_WAIT, 1, NULL, NULL, 0);
+            }
+
+            their_val = g_rendtable[i].val;
+
+            /* Mark slot free under lock */
+            while (__sync_lock_test_and_set(&g_rendlock, 1)) {}
+            g_rendtable[i].active = 0;
+            __sync_lock_release(&g_rendlock);
+
+            return (int64_t)their_val;
+        }
+    }
+
+    __sync_lock_release(&g_rendlock);
+    p9_set_errstr("rendezvous: table full");
+    return -1;
+}
+
+/*
+ * Syscall: errstr
+ * Copy the current error string into buf (up to len bytes, null-terminated).
+ */
+int64_t p9sys_errstr(PEB *peb, char *buf, int len)
+{
+    const char *err;
+    int n;
+
+    if (buf == NULL || len <= 0) {
+        return -1;
+    }
+    (void)peb;
+
+    err = p9_get_errstr();
+    if (err == NULL) {
+        err = "";
+    }
+
+    n = (int)strlen(err);
+    if (n >= len) {
+        n = len - 1;
+    }
+    memcpy(buf, err, (size_t)n);
+    buf[n] = '\0';
+    return 0;
+}
+
+/*
+ * Syscall: chdir
+ * Change the process working directory in the 9P namespace.
+ */
+int64_t p9sys_chdir(PEB *peb, const char *path)
+{
+    P9Node *node;
+    char full_path[1024];
+
+    if (peb == NULL || path == NULL) {
+        p9_set_errstr("chdir: invalid argument");
+        return -1;
+    }
+
+    if (path[0] == '/') {
+        /* Absolute path */
+        node = tree_lookup(tree_root(), path);
+    } else {
+        /* Relative — resolve against current cwd */
+        snprintf(full_path, sizeof(full_path), "%s/%s", peb->cwd, path);
+        node = tree_lookup(tree_root(), full_path);
+        path = full_path;
+    }
+
+    if (node == NULL) {
+        p9_set_errstr("chdir: directory not found");
+        return -1;
+    }
+
+    if (!(node->mode & P9_DMDIR)) {
+        p9_set_errstr("chdir: not a directory");
+        return -1;
+    }
+
+    strncpy(peb->cwd, path, sizeof(peb->cwd) - 1);
+    peb->cwd[sizeof(peb->cwd) - 1] = '\0';
+    return 0;
+}
+
+/*
+ * Syscall: alarm
+ * Set a process alarm in milliseconds.
+ */
+int64_t p9sys_alarm(PEB *peb, uint32_t ms)
+{
+    struct itimerval it;
+
+    (void)peb;
+
+    memset(&it, 0, sizeof(it));
+    it.it_value.tv_sec  = (long)(ms / 1000U);
+    it.it_value.tv_usec = (long)((ms % 1000U) * 1000U);
+
+    setitimer(ITIMER_REAL, &it, NULL);
+    return 0;
+}
+
+/*
+ * Syscall: semacquire
+ * Decrement *addr if > 0, else block (if block==1) or return -1.
+ */
+int64_t p9sys_semacquire(PEB *peb, int *addr, int block)
+{
+    int val;
+
+    if (peb == NULL || addr == NULL) {
+        return -1;
+    }
+
+    for (;;) {
+        val = __atomic_load_n(addr, __ATOMIC_SEQ_CST);
+        if (val > 0) {
+            if (__atomic_compare_exchange_n(addr, &val, val - 1, 0,
+                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+                return 0;
+            }
+            /* CAS failed — retry */
+            continue;
+        }
+        if (!block) {
+            p9_set_errstr("semacquire: would block");
+            return -1;
+        }
+        /* Block until someone releases */
+        syscall(SYS_futex, addr, FUTEX_WAIT, 0, NULL, NULL, 0);
+    }
+}
+
+/*
+ * Syscall: semrelease
+ * Increment *addr by count and wake blocked acquirers.
+ */
+int64_t p9sys_semrelease(PEB *peb, int *addr, int count)
+{
+    if (peb == NULL || addr == NULL) {
+        return -1;
+    }
+
+    __atomic_add_fetch(addr, count, __ATOMIC_SEQ_CST);
+    syscall(SYS_futex, addr, FUTEX_WAKE, count, NULL, NULL, 0);
+    return (int64_t)count;
+}
+
+/*
+ * Syscall: tsemacquire
+ * Like semacquire but with a millisecond timeout.
+ */
+int64_t p9sys_tsemacquire(PEB *peb, int *addr, uint32_t ms)
+{
+    int val;
+    struct timespec ts;
+    long rc;
+
+    if (peb == NULL || addr == NULL) {
+        return -1;
+    }
+
+    ts.tv_sec  = (time_t)(ms / 1000U);
+    ts.tv_nsec = (long)((ms % 1000U) * 1000000UL);
+
+    for (;;) {
+        val = __atomic_load_n(addr, __ATOMIC_SEQ_CST);
+        if (val > 0) {
+            if (__atomic_compare_exchange_n(addr, &val, val - 1, 0,
+                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+                return 0;
+            }
+            continue;
+        }
+        rc = syscall(SYS_futex, addr, FUTEX_WAIT, 0, &ts, NULL, 0);
+        if (rc == -1 && errno == ETIMEDOUT) {
+            p9_set_errstr("tsemacquire: timeout");
+            return -1;
+        }
+    }
+}
+
+/*
+ * Syscall: notify
+ * Register a per-process note (signal-like) handler.
+ */
+int64_t p9sys_notify(PEB *peb, void *fn)
 {
     if (peb == NULL) {
         return -1;
     }
 
-    /* TODO: Implement rendezvous */
-    fprintf(stderr, "p9sys_rendezvous: tag=0x%llx val=0x%llx\n",
-            (unsigned long long)tag, (unsigned long long)val);
+    peb->notify_fn = (void (*)(void *, char *))fn;
+    return 0;
+}
 
-    p9_set_errstr("rendezvous: not implemented");
+/*
+ * Syscall: noted
+ * Called from a note handler to acknowledge the note.
+ * v == 1 (NCONT): continue after the note.
+ * v == 0 (NDFLT): perform the default action (terminate).
+ */
+int64_t p9sys_noted(PEB *peb, int v)
+{
+    if (peb == NULL) {
+        return -1;
+    }
+
+    peb->note_pending = 0;
+    peb->pending_note[0] = '\0';
+
+    if (v == 0) {
+        /* Default action — exit the process */
+        peb->state = P9_STATE_ZOMBIE;
+        peb->exit_status = -1;
+        exit(1);
+    }
+
+    /* v == 1 (NCONT): continue execution */
+    return 0;
+}
+
+/*
+ * Syscall: await
+ * Wait for an incoming note; copy it into buf.
+ */
+int64_t p9sys_await(PEB *peb, char *buf, int len)
+{
+    int n;
+
+    if (peb == NULL || buf == NULL || len <= 0) {
+        return -1;
+    }
+
+    if (!peb->note_pending) {
+        /* No note pending — return empty (non-blocking in simple impl) */
+        buf[0] = '\0';
+        return 0;
+    }
+
+    n = (int)strlen(peb->pending_note);
+    if (n >= len) {
+        n = len - 1;
+    }
+    memcpy(buf, peb->pending_note, (size_t)n);
+    buf[n] = '\0';
+
+    peb->note_pending = 0;
+    peb->pending_note[0] = '\0';
+    return (int64_t)n;
+}
+
+/*
+ * Syscall: exec
+ * Execute a Plan 9 binary from the 9P namespace.
+ * Full implementation requires loader integration — stub for now.
+ */
+int64_t p9sys_exec(PEB *peb, const char *path, char **argv)
+{
+    (void)peb;
+    (void)argv;
+
+    /* TODO: find binary in 9P namespace, load and transfer control */
+    fprintf(stderr, "p9sys_exec: path=%s (not yet implemented)\n",
+            path ? path : "(null)");
+    p9_set_errstr("exec: not yet implemented");
     return -1;
+}
+
+/*
+ * Syscall: _nsec (deprecated)
+ * Returns the current time in nanoseconds (monotonic clock).
+ */
+int64_t p9sys_nsec(PEB *peb)
+{
+    struct timespec ts;
+
+    (void)peb;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
 }
