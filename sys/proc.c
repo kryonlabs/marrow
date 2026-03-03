@@ -1,14 +1,16 @@
 /*
- * Kryon /proc Device - Process Information
+ * Marrow /proc Device - Process Information
  * C89/C90 compliant
  *
  * Implements basic /proc filesystem for process information
- * Required for rc shell operation in CPU server mode
+ * Extended to support Plan 9 PEB (Process Environment Block) access
+ * Required for Plan 9 assembly support and CPU server mode
  */
 
 #include "lib9p.h"
 #include <stdlib.h>
 #include "compat.h"
+#include "runtime/peb.h"
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -21,6 +23,7 @@ typedef struct {
     pid_t pid;
     char cmd[64];
     int active;
+    PEB *peb;  /* Plan 9 Process Environment Block (optional) */
 } ProcState;
 
 /*
@@ -103,6 +106,61 @@ static ssize_t proc_ctl_write(const char *buf, size_t count, uint64_t offset,
 }
 
 /*
+ * Read from /proc/[pid]/regs
+ * Returns register state from Plan 9 PEB if available
+ */
+static ssize_t proc_regs_read(char *buf, size_t count, uint64_t offset,
+                              void *data)
+{
+    ProcState *state = (ProcState *)data;
+    static char regs_buf[2048];
+    int len;
+    size_t to_copy;
+
+    if (state == NULL || !state->active) {
+        return -1;
+    }
+
+    /* If no PEB, return empty */
+    if (state->peb == NULL) {
+        return 0;
+    }
+
+    /* Format registers using accessor function */
+    len = peb_format_regs(state->peb, regs_buf, sizeof(regs_buf));
+    if (len < 0) {
+        return -1;
+    }
+
+    if (offset >= (uint64_t)len) {
+        return 0;  /* EOF */
+    }
+
+    to_copy = len - (size_t)offset;
+    if (to_copy > count) {
+        to_copy = count;
+    }
+
+    memcpy(buf, regs_buf + offset, to_copy);
+
+    return (ssize_t)to_copy;
+}
+
+/*
+ * Write to /proc/[pid]/regs
+ * Allows modifying register state for debugging
+ */
+static ssize_t proc_regs_write(const char *buf, size_t count, uint64_t offset,
+                               void *data)
+{
+    /* TODO: Implement register modification for debugging */
+    (void)buf;
+    (void)offset;
+    (void)data;
+    return (ssize_t)count;
+}
+
+/*
  * Initialize /proc device
  * Creates /proc directory structure
  */
@@ -143,6 +201,7 @@ int devproc_init(P9Node *root)
         strncpy(state->cmd, "kryon-server", sizeof(state->cmd) - 1);
         state->cmd[sizeof(state->cmd) - 1] = '\0';
         state->active = 1;
+        state->peb = NULL;  /* No PEB for host processes */
         g_nprocs = 1;
 
         status_node = tree_create_file(self_dir, "status", state,
@@ -150,6 +209,18 @@ int devproc_init(P9Node *root)
                                        NULL);
         if (status_node == NULL) {
             fprintf(stderr, "devproc_init: cannot create status\n");
+            return -1;
+        }
+    }
+
+    /* Create regs file (for Plan 9 processes) */
+    if (g_procs[0].peb != NULL) {
+        P9Node *regs_node;
+        regs_node = tree_create_file(self_dir, "regs", &g_procs[0],
+                                    (P9ReadFunc)proc_regs_read,
+                                    (P9WriteFunc)proc_regs_write);
+        if (regs_node == NULL) {
+            fprintf(stderr, "devproc_init: cannot create regs\n");
             return -1;
         }
     }
@@ -175,7 +246,7 @@ int devproc_init(P9Node *root)
  * Add a process to /proc
  * Returns 0 on success, -1 on error
  */
-int devproc_add_pid(pid_t pid, const char *cmd)
+int devproc_add_pid(pid_t pid, const char *cmd, PEB *peb)
 {
     int slot;
     char pid_str[32];
@@ -206,6 +277,7 @@ int devproc_add_pid(pid_t pid, const char *cmd)
         strcpy(g_procs[slot].cmd, "unknown");
     }
     g_procs[slot].active = 1;
+    g_procs[slot].peb = peb;  /* Set PEB pointer (may be NULL) */
     g_nprocs++;
 
     /* Get /proc directory */

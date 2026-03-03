@@ -76,7 +76,7 @@ MarrowInstance* marrow_create(MarrowConfig *config)
         instance->config.screen_width = 800;
     }
     if (instance->config.screen_height == 0) {
-        instance->config.screen_height = 600;
+        instance->config.screen_height = 1080;
     }
 
     /* Set default log callback if none provided */

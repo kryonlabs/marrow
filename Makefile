@@ -60,13 +60,25 @@ MARROW_REGISTRY_SRCS = $(SRC_DIR)/registry/cpu.c $(SRC_DIR)/registry/rcpu.c \
                        $(SRC_DIR)/registry/namespace.c $(SRC_DIR)/registry/service.c \
                        $(SRC_DIR)/registry/discovery.c $(SRC_DIR)/registry/mount.c
 MARROW_SYS_SRCS = sys/console.c sys/fd.c sys/proc.c sys/env.c sys/svc.c \
-                  sys/devdraw.c sys/devscreen.c sys/devmouse.c sys/devkbd.c sys/devaudio.c
+                  sys/devdraw.c sys/devscreen.c sys/devmouse.c sys/devkbd.c sys/devaudio.c \
+                  sys/devtime.c
 MARROW_PLATFORM_SRCS = $(SRC_DIR)/platform/socket.c
+
+# Runtime support (PEB, context switching, syscalls)
+MARROW_RUNTIME_SRCS = $(SRC_DIR)/runtime/peb.c $(SRC_DIR)/runtime/context.c \
+                       $(SRC_DIR)/runtime/syscall.c $(SRC_DIR)/runtime/p9compat.c
+
+# Loader (Plan 9 executable loading)
+MARROW_LOADER_SRCS = $(SRC_DIR)/loader/p9exec.c
+
+# Assembly stubs (platform-specific)
+MARROW_ASM_SRCS = $(SRC_DIR)/asm/amd64_ctx.S $(SRC_DIR)/asm/amd64_syscall.S
 
 MARROW_SERVER_SRCS = $(SRC_DIR)/server/core.c $(SRC_DIR)/server/init.c $(SRC_DIR)/server/server.c
 
 MARROW_SRCS = $(MARROW_9P_SRCS) $(MARROW_GRAPHICS_SRCS) $(MARROW_AUTH_SRCS) $(MARROW_REGISTRY_SRCS) \
-              $(MARROW_SYS_SRCS) $(MARROW_PLATFORM_SRCS)
+              $(MARROW_SYS_SRCS) $(MARROW_PLATFORM_SRCS) \
+              $(MARROW_RUNTIME_SRCS) $(MARROW_LOADER_SRCS)
 
 # Object files
 MARROW_OBJS = $(MARROW_9P_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
@@ -74,7 +86,10 @@ MARROW_OBJS = $(MARROW_9P_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
               $(MARROW_AUTH_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
               $(MARROW_REGISTRY_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
               $(MARROW_SYS_SRCS:sys/%.c=$(BUILD_DIR)/sys/%.o) \
-              $(MARROW_PLATFORM_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+              $(MARROW_PLATFORM_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
+              $(MARROW_RUNTIME_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
+              $(MARROW_LOADER_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
+              $(MARROW_ASM_SRCS:$(SRC_DIR)/%.S=$(BUILD_DIR)/%.o)
 
 MARROW_SERVER_OBJS = $(MARROW_SERVER_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
@@ -99,6 +114,9 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)/platform
 	mkdir -p $(BUILD_DIR)/server
 	mkdir -p $(BUILD_DIR)/sys
+	mkdir -p $(BUILD_DIR)/runtime
+	mkdir -p $(BUILD_DIR)/loader
+	mkdir -p $(BUILD_DIR)/asm
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -133,6 +151,36 @@ $(BUILD_DIR)/sys/%.o: sys/%.c | $(BUILD_DIR)
 $(BUILD_DIR)/sys/devaudio.o: sys/devaudio.c | $(BUILD_DIR)
 	$(CC) -std=c99 -Wall -Wpedantic -g -D_POSIX_C_SOURCE=200112L \
 		$(filter-out -std=c89,$(CFLAGS)) -I$(INCLUDE_DIR) -I$(SRC_DIR) -c $< -o $@
+
+# Assembly files (amd64)
+$(BUILD_DIR)/asm/%.o: $(SRC_DIR)/asm/%.S | $(BUILD_DIR)
+	as --64 $< -o $@
+
+# Test programs
+TEST_DIR = tests
+TEST_BIN_DIR = $(BUILD_DIR)/tests
+
+.PHONY: tests
+tests: $(TEST_BIN_DIR)/test_peb $(TEST_BIN_DIR)/test_loader
+
+$(TEST_BIN_DIR):
+	mkdir -p $(TEST_BIN_DIR)
+
+$(TEST_BIN_DIR)/test_peb: $(TEST_DIR)/test_peb.c $(LIB_TARGET) | $(TEST_BIN_DIR)
+	gcc -std=c89 -Wall -Wpedantic -g $(CFLAGS) -I$(INCLUDE_DIR) -I$(SRC_DIR) \
+		$< -L$(BUILD_DIR) -lmarrow -o $@
+
+$(TEST_BIN_DIR)/test_loader: $(TEST_DIR)/test_loader.c $(LIB_TARGET) | $(TEST_BIN_DIR)
+	gcc -std=c89 -Wall -Wpedantic -g $(CFLAGS) -I$(INCLUDE_DIR) -I$(SRC_DIR) \
+		$< -L$(BUILD_DIR) -lmarrow -o $@
+
+.PHONY: test-peb
+test-peb: $(TEST_BIN_DIR)/test_peb
+	$(TEST_BIN_DIR)/test_peb
+
+.PHONY: test-loader
+test-loader: $(TEST_BIN_DIR)/test_loader
+	$(TEST_BIN_DIR)/test_loader
 
 # Clean
 .PHONY: clean

@@ -5,6 +5,13 @@
 #include <stdint.h>
 
 /*
+ * Define useconds_t if not available
+ */
+#ifndef HAVE_USECONDS_T
+typedef unsigned int useconds_t;
+#endif
+
+/*
  * C89/C90 compatibility declarations for POSIX functions
  * These are not part of C89 but are available on Linux systems
  */
@@ -47,6 +54,13 @@ extern int putenv(char *string);
  */
 #ifndef HAVE_KILL
 extern int kill(int pid, int sig);
+#endif
+
+/*
+ * usleep is not in C89 but is available on POSIX systems
+ */
+#ifndef HAVE_USLEEP
+extern int usleep(useconds_t usec);
 #endif
 
 #endif /* COMPAT_H */
