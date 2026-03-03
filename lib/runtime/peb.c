@@ -417,6 +417,7 @@ int peb_alloc_fd(PEB *peb)
             peb->fds[i].node_ptr = NULL;
             peb->fds[i].mode = 0;
             peb->fds[i].offset = 0;
+            peb->fds[i].host_fd = -1;
             return i;
         }
     }
@@ -444,10 +445,16 @@ int peb_close_fd(PEB *peb, int fd)
         return -1;
     }
 
+    /* Close host pipe fd if present */
+    if (peb->fds[fd].host_fd >= 0) {
+        close(peb->fds[fd].host_fd);
+    }
+
     peb->fds[fd].is_active = 0;
     peb->fds[fd].node_ptr = NULL;
     peb->fds[fd].mode = 0;
     peb->fds[fd].offset = 0;
+    peb->fds[fd].host_fd = -1;
 
     return 0;
 }

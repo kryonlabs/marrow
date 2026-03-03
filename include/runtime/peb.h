@@ -92,6 +92,7 @@ typedef struct {
     void *node_ptr;      /* Pointer to P9Node */
     int mode;            /* Open mode (P9_OREAD, etc.) */
     uint64_t offset;     /* Current file offset */
+    int host_fd;         /* Host pipe fd, or -1 if not a pipe */
 } P9FdEntry;
 
 /*

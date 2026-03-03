@@ -11,6 +11,9 @@
 #include "runtime/syscall.h"
 #include "lib9p.h"
 #include "p9/p9compat.h"
+#include "namespace.h"
+#include "loader/p9exec.h"
+#include "runtime/context.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -54,6 +57,45 @@ typedef struct {
 
 static P9RendSlot g_rendtable[P9_REND_SIZE];
 static volatile int g_rendlock = 0;
+
+/*
+ * StaticFileData — dynamic buffer backing a created file
+ */
+typedef struct {
+    uint8_t  *buf;
+    uint64_t  len;
+    uint64_t  cap;
+} StaticFileData;
+
+static ssize_t static_file_read(char *buf, size_t count, uint64_t offset,
+                                void *vdata)
+{
+    StaticFileData *d = (StaticFileData *)vdata;
+    uint64_t avail;
+    if (d == NULL || offset >= d->len) return 0;
+    avail = d->len - offset;
+    if ((uint64_t)count > avail) count = (size_t)avail;
+    memcpy(buf, d->buf + offset, count);
+    return (ssize_t)count;
+}
+
+static ssize_t static_file_write(const char *buf, size_t count,
+                                 uint64_t offset, void *vdata)
+{
+    StaticFileData *d = (StaticFileData *)vdata;
+    uint64_t end;
+    uint8_t *nb;
+    if (d == NULL) return -1;
+    end = offset + (uint64_t)count;
+    if (end > d->cap) {
+        nb = (uint8_t *)realloc(d->buf, (size_t)(end * 2));
+        if (nb == NULL) return -1;
+        d->buf = nb; d->cap = end * 2;
+    }
+    memcpy(d->buf + offset, buf, count);
+    if (end > d->len) d->len = end;
+    return (ssize_t)count;
+}
 
 /*
  * Syscall gateway address (set at initialization)
@@ -526,6 +568,12 @@ int64_t p9sys_pread(PEB *peb, int fd, void *buf, int count, int64_t offset)
     node = (P9Node *)fd_entry->node_ptr;
     use_seek = (offset == P9_NOSEEK);
 
+    /* Host pipe fd passthrough */
+    if (fd_entry->host_fd >= 0) {
+        result = (int64_t)read(fd_entry->host_fd, buf, (size_t)count);
+        return result;
+    }
+
     if (fd == 0 && node == NULL) {
         /* stdin with no 9P node — read from host stdin */
         result = read(0, buf, (size_t)count);
@@ -578,6 +626,12 @@ int64_t p9sys_pwrite(PEB *peb, int fd, const void *buf, int count, int64_t offse
     node = (P9Node *)fd_entry->node_ptr;
     use_seek = (offset == P9_NOSEEK);
 
+    /* Host pipe fd passthrough */
+    if (fd_entry->host_fd >= 0) {
+        result = (int64_t)write(fd_entry->host_fd, buf, (size_t)count);
+        return result;
+    }
+
     if ((fd == 1 || fd == 2) && node == NULL) {
         /* stdout/stderr with no 9P node — write to host */
         result = write(fd, buf, (size_t)count);
@@ -597,12 +651,18 @@ int64_t p9sys_pwrite(PEB *peb, int fd, const void *buf, int count, int64_t offse
         result = node_write(node, (const char *)buf, (size_t)count,
                             fd_entry->offset);
         if (result > 0) {
+            uint64_t end = fd_entry->offset + (uint64_t)result;
+            if (end > node->length) node->length = end;
             fd_entry->offset += (uint64_t)result;
         }
     } else {
         /* Positional write — do not advance fd_entry->offset */
         result = node_write(node, (const char *)buf, (size_t)count,
                             (uint64_t)offset);
+        if (result > 0) {
+            uint64_t end = (uint64_t)offset + (uint64_t)result;
+            if (end > node->length) node->length = end;
+        }
     }
 
     return result;
@@ -633,27 +693,76 @@ int64_t p9sys_create(PEB *peb, const char *path, int mode, uint32_t perm)
 {
     P9FdEntry *fd_entry;
     int fd;
-    P9Node *root;
+    P9Node *parent;
     P9Node *node;
+    char dir[1024];
+    const char *name;
+    const char *slash;
+    size_t dirlen;
 
     if (peb == NULL || path == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper 9P create operation */
-    /* For now, just allocate an fd */
+    /* Split path into directory and filename */
+    slash = strrchr(path, '/');
+    if (slash != NULL) {
+        dirlen = (size_t)(slash - path);
+        if (dirlen == 0) {
+            dir[0] = '/'; dir[1] = '\0';
+        } else if (dirlen < sizeof(dir)) {
+            memcpy(dir, path, dirlen);
+            dir[dirlen] = '\0';
+        } else {
+            p9_set_errstr("create: path too long");
+            return -1;
+        }
+        name = slash + 1;
+    } else {
+        strncpy(dir, peb->cwd, sizeof(dir) - 1);
+        dir[sizeof(dir) - 1] = '\0';
+        name = path;
+    }
+
+    parent = tree_lookup(tree_root(), dir);
+    if (parent == NULL) {
+        p9_set_errstr("create: parent directory not found");
+        return -1;
+    }
+
+    if (perm & P9_DMDIR) {
+        node = tree_create_dir(parent, name);
+    } else {
+        StaticFileData *sfd = (StaticFileData *)calloc(1, sizeof(StaticFileData));
+        if (sfd == NULL) {
+            p9_set_errstr("create: out of memory");
+            return -1;
+        }
+        node = tree_create_file(parent, name, sfd,
+                                (P9ReadFunc)static_file_read,
+                                (P9WriteFunc)static_file_write);
+        if (node == NULL) {
+            free(sfd);
+        }
+    }
+
+    if (node == NULL) {
+        p9_set_errstr("create: failed to create node");
+        return -1;
+    }
 
     fd = peb_alloc_fd(peb);
     if (fd < 0) {
+        p9_set_errstr("create: no free file descriptors");
         return -1;
     }
 
     fd_entry = peb_get_fd(peb, fd);
-    if (fd_entry != NULL) {
-        fd_entry->is_active = 1;
-        fd_entry->mode = mode;
-        fd_entry->offset = 0;
-    }
+    fd_entry->is_active = 1;
+    fd_entry->node_ptr = node;
+    fd_entry->mode = mode;
+    fd_entry->offset = 0;
+    fd_entry->host_fd = -1;
 
     fprintf(stderr, "p9sys_create: path=%s mode=%d perm=0x%x -> fd=%d\n",
             path, mode, perm, fd);
@@ -666,12 +775,24 @@ int64_t p9sys_create(PEB *peb, const char *path, int mode, uint32_t perm)
  */
 int64_t p9sys_remove(PEB *peb, const char *path)
 {
+    P9Node *node;
+
     if (peb == NULL || path == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper 9P remove operation */
-    fprintf(stderr, "p9sys_remove: path=%s\n", path);
+    node = tree_lookup(tree_root(), path);
+    if (node == NULL) {
+        p9_set_errstr("remove: file not found");
+        return -1;
+    }
+
+    if (tree_remove_node(node) < 0) {
+        p9_set_errstr("remove: failed");
+        return -1;
+    }
+
+    fprintf(stderr, "p9sys_remove: path=%s -> ok\n", path);
 
     return 0;
 }
@@ -701,10 +822,12 @@ int64_t p9sys_seek(PEB *peb, int fd, int64_t offset, int whence)
         case P9_SEEK_CUR:
             new_offset = (int64_t)fd_entry->offset + offset;
             break;
-        case P9_SEEK_END:
-            /* TODO: Get file size */
-            new_offset = offset;
+        case P9_SEEK_END: {
+            P9Node *seek_node = (P9Node *)fd_entry->node_ptr;
+            uint64_t flen = (seek_node != NULL) ? seek_node->length : 0;
+            new_offset = (int64_t)flen + offset;
             break;
+        }
         default:
             p9_set_errstr("seek: invalid whence");
             return -1;
@@ -728,12 +851,24 @@ int64_t p9sys_seek(PEB *peb, int fd, int64_t offset, int whence)
  */
 int64_t p9sys_bind(PEB *peb, const char *path, const char *spec, int flags)
 {
+    NSBindType btype;
+
     if (peb == NULL || path == NULL || spec == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper 9P bind operation */
-    fprintf(stderr, "p9sys_bind: path=%s spec=%s flags=%d\n", path, spec, flags);
+    /* Map Plan 9 mount flags to NSBindType */
+    if (flags & 1)       btype = NS_BIND_BEFORE;
+    else if (flags & 2)  btype = NS_BIND_AFTER;
+    else                 btype = NS_BIND_REPLACE;
+
+    if (namespace_bind(tree_root(), spec, path, btype) < 0) {
+        p9_set_errstr("bind: failed");
+        return -1;
+    }
+
+    fprintf(stderr, "p9sys_bind: spec=%s path=%s flags=%d -> ok\n",
+            spec, path, flags);
 
     return 0;
 }
@@ -744,15 +879,17 @@ int64_t p9sys_bind(PEB *peb, const char *path, const char *spec, int flags)
 int64_t p9sys_mount(PEB *peb, int fd, const char *spec, int flags,
                    const char *aname)
 {
-    if (peb == NULL || spec == NULL || aname == NULL) {
+    (void)fd;
+    (void)flags;
+    (void)aname;
+
+    if (peb == NULL || spec == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper 9P mount operation */
-    fprintf(stderr, "p9sys_mount: fd=%d spec=%s flags=%d aname=%s\n",
-            fd, spec, flags, aname);
-
-    return 0;
+    /* 9P client session mount requires full 9P negotiation — not supported */
+    p9_set_errstr("mount: not supported in this build");
+    return -1;
 }
 
 /*
@@ -760,12 +897,18 @@ int64_t p9sys_mount(PEB *peb, int fd, const char *spec, int flags,
  */
 int64_t p9sys_unmount(PEB *peb, const char *spec, const char *where)
 {
-    if (peb == NULL || spec == NULL || where == NULL) {
+    (void)spec;
+
+    if (peb == NULL || where == NULL) {
         return -1;
     }
 
-    /* TODO: Implement proper 9P unmount operation */
-    fprintf(stderr, "p9sys_unmount: spec=%s where=%s\n", spec, where);
+    if (namespace_unbind(where) < 0) {
+        p9_set_errstr("unmount: failed");
+        return -1;
+    }
+
+    fprintf(stderr, "p9sys_unmount: where=%s -> ok\n", where);
 
     return 0;
 }
@@ -776,6 +919,7 @@ int64_t p9sys_unmount(PEB *peb, const char *spec, const char *where)
  */
 int64_t p9sys_pipe(PEB *peb, int *fds)
 {
+    int pfd[2];
     int fd0, fd1;
     P9FdEntry *fd0_entry, *fd1_entry;
 
@@ -783,43 +927,45 @@ int64_t p9sys_pipe(PEB *peb, int *fds)
         return -1;
     }
 
-    /* Allocate two file descriptors */
+    /* Create host pipe */
+    if (pipe(pfd) < 0) {
+        p9_set_errstr("pipe: host pipe failed");
+        return -1;
+    }
+
+    /* Allocate two P9 file descriptors */
     fd0 = peb_alloc_fd(peb);
-    if (fd0 < 0) {
+    fd1 = (fd0 >= 0) ? peb_alloc_fd(peb) : -1;
+
+    if (fd0 < 0 || fd1 < 0) {
+        if (fd0 >= 0) peb_close_fd(peb, fd0);
+        close(pfd[0]);
+        close(pfd[1]);
         p9_set_errstr("pipe: no free file descriptors");
         return -1;
     }
 
-    fd1 = peb_alloc_fd(peb);
-    if (fd1 < 0) {
-        peb_close_fd(peb, fd0);
-        p9_set_errstr("pipe: no free file descriptors");
-        return -1;
-    }
-
-    /* Initialize fd entries */
+    /* Wire read end */
     fd0_entry = peb_get_fd(peb, fd0);
+    fd0_entry->is_active = 1;
+    fd0_entry->node_ptr  = NULL;
+    fd0_entry->mode      = P9_OREAD;
+    fd0_entry->offset    = 0;
+    fd0_entry->host_fd   = pfd[0];
+
+    /* Wire write end */
     fd1_entry = peb_get_fd(peb, fd1);
+    fd1_entry->is_active = 1;
+    fd1_entry->node_ptr  = NULL;
+    fd1_entry->mode      = P9_OWRITE;
+    fd1_entry->offset    = 0;
+    fd1_entry->host_fd   = pfd[1];
 
-    if (fd0_entry != NULL) {
-        fd0_entry->is_active = 1;
-        fd0_entry->mode = P9_OREAD;
-        fd0_entry->offset = 0;
-        /* TODO: Create pipe node */
-    }
-
-    if (fd1_entry != NULL) {
-        fd1_entry->is_active = 1;
-        fd1_entry->mode = P9_OWRITE;
-        fd1_entry->offset = 0;
-        /* TODO: Create pipe node */
-    }
-
-    /* Return fds to caller */
     fds[0] = fd0;
     fds[1] = fd1;
 
-    fprintf(stderr, "p9sys_pipe: -> [%d, %d]\n", fd0, fd1);
+    fprintf(stderr, "p9sys_pipe: -> [%d, %d] (host %d, %d)\n",
+            fd0, fd1, pfd[0], pfd[1]);
 
     return 0;
 }
@@ -829,19 +975,26 @@ int64_t p9sys_pipe(PEB *peb, int *fds)
  */
 int64_t p9sys_exits(PEB *peb, const char *msg)
 {
+    int i;
+
     if (peb == NULL) {
-        return -1;
+        exit(1);
     }
 
     fprintf(stderr, "p9sys_exits: %s\n", msg ? msg : "(null)");
 
-    /* Mark process as exiting */
+    /* Close all open file descriptors */
+    for (i = 0; i < P9_MAX_FDS; i++) {
+        if (peb->fds[i].is_active) {
+            peb_close_fd(peb, i);
+        }
+    }
+
     peb->state = P9_STATE_ZOMBIE;
-    peb->exit_status = (msg != NULL) ? -1 : 0;
+    peb->exit_status = (msg == NULL || msg[0] == '\0') ? 0 : 1;
 
-    /* TODO: Properly terminate process */
-
-    return 0;  /* Should not return */
+    exit(peb->exit_status);
+    return 0; /* unreachable */
 }
 
 /*
@@ -1761,14 +1914,64 @@ int64_t p9sys_await(PEB *peb, char *buf, int len)
  */
 int64_t p9sys_exec(PEB *peb, const char *path, char **argv)
 {
-    (void)peb;
-    (void)argv;
+    P9Node *node;
+    uint64_t flen;
+    uint8_t *buf;
+    int64_t n;
+    const char *cmd;
+    PEB *new_peb;
+    int i;
 
-    /* TODO: find binary in 9P namespace, load and transfer control */
-    fprintf(stderr, "p9sys_exec: path=%s (not yet implemented)\n",
-            path ? path : "(null)");
-    p9_set_errstr("exec: not yet implemented");
-    return -1;
+    if (peb == NULL || path == NULL) {
+        p9_set_errstr("exec: invalid argument");
+        return -1;
+    }
+
+    node = tree_lookup(tree_root(), path);
+    if (node == NULL) {
+        p9_set_errstr("exec: not found");
+        return -1;
+    }
+
+    flen = node->length;
+    if (flen == 0) {
+        p9_set_errstr("exec: empty file");
+        return -1;
+    }
+
+    buf = (uint8_t *)malloc((size_t)flen);
+    if (buf == NULL) {
+        p9_set_errstr("exec: out of memory");
+        return -1;
+    }
+
+    n = (int64_t)node_read(node, (char *)buf, (size_t)flen, 0);
+    if (n <= 0) {
+        free(buf);
+        p9_set_errstr("exec: read failed");
+        return -1;
+    }
+
+    cmd = (argv != NULL && argv[0] != NULL) ? argv[0] : path;
+    new_peb = p9_load_executable_from_memory(buf, (size_t)n, cmd);
+    free(buf);
+
+    if (new_peb == NULL) {
+        p9_set_errstr("exec: load failed");
+        return -1;
+    }
+
+    /* Inherit fd table and cwd from old process */
+    for (i = 0; i < P9_MAX_FDS; i++) {
+        new_peb->fds[i] = peb->fds[i];
+    }
+    strncpy(new_peb->cwd, peb->cwd, sizeof(new_peb->cwd) - 1);
+    new_peb->cwd[sizeof(new_peb->cwd) - 1] = '\0';
+
+    fprintf(stderr, "p9sys_exec: path=%s -> entering new binary\n", path);
+
+    amd64_enter_plan9(new_peb); /* noreturn */
+    return -1; /* unreachable */
 }
 
 /*
