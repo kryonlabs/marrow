@@ -1548,3 +1548,27 @@ void memdraw_text_font(Memimage *dst, Point p, const char *str, Subfont *sf, uns
         }
     }
 }
+
+/*
+ * Calculate the width of a string using font metrics
+ */
+int memdraw_text_width(Subfont *sf, const char *str)
+{
+    int width = 0;
+    int i, ch;
+
+    if (sf == NULL || str == NULL) {
+        return 0;
+    }
+
+    for (i = 0; str[i] != '\0'; i++) {
+        ch = (unsigned char)str[i];
+        if (ch >= 0 && ch <= sf->n) {
+            width += sf->info[ch].width;
+        } else {
+            width += sf->height / 2;  /* Approximate for unknown chars */
+        }
+    }
+
+    return width;
+}
