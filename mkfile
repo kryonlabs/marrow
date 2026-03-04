@@ -1,10 +1,16 @@
 # Marrow - Portable Distributed Kernel
-# Plan 9 mk build file
+# Plan 9 mk build file - Plan 9 Compilers Only
 
 <../mkfile.common
 
-# Object file extension
-O=.o
+# Plan 9 architecture (must be set for $O to work)
+OBJTYPE=amd64
+
+# Plan 9 toolchain settings
+LDFLAGS+=-lpthread  # Plan 9 build on Linux still needs pthread
+ASFLAGS=
+MARROW_ASM_EXT=S  # Use .S files (GCC/as compatible)
+CFLAGS+=-DUSE_PLAN9_AUDIO  # Enable Plan 9 audio support
 
 # Directories
 SRC=lib
@@ -16,7 +22,7 @@ BIN=bin
 LIB=$BUILD/libmarrow.a
 SERVER=$BIN/marrow
 
-# Source files by module
+# Source files by module (paths relative to $SRC)
 MARROW_9P=9p/protocol 9p/ops 9p/tree
 MARROW_GRAPHICS=graphics/memdraw graphics/memimage graphics/pixconv
 MARROW_AUTH=auth/ed448 auth/dp9ik auth/p9any auth/session auth/factotum auth/keys auth/secstore auth/p9sk1
@@ -25,7 +31,7 @@ MARROW_SYS=sys/console sys/fd sys/proc sys/env sys/svc sys/devdraw sys/devscreen
 MARROW_PLATFORM=platform/socket
 MARROW_RUNTIME=runtime/peb runtime/context runtime/syscall runtime/p9compat
 MARROW_LOADER=loader/p9exec
-MARROW_ASM=asm/amd64_ctx asm/amd64_syscall
+MARROW_ASM=amd64_ctx amd64_syscall
 
 # Server sources
 MARROW_SERVER=server/core server/init server/server
@@ -35,12 +41,12 @@ OFILES=${MARROW_9P:%=$BUILD/%.$O} ${MARROW_GRAPHICS:%=$BUILD/%.$O} \
 	${MARROW_AUTH:%=$BUILD/%.$O} ${MARROW_REGISTRY:%=$BUILD/%.$O} \
 	${MARROW_SYS:%=$BUILD/%.$O} ${MARROW_PLATFORM:%=$BUILD/%.$O} \
 	${MARROW_RUNTIME:%=$BUILD/%.$O} ${MARROW_LOADER:%=$BUILD/%.$O} \
-	${MARROW_ASM:%=$BUILD/%.$O}
+	${MARROW_ASM:%=$BUILD/asm/%.$O}
 
 SERVER_OFILES=${MARROW_SERVER:%=$BUILD/%.$O}
 
 # Default target
-all:V: $LIB $SERVER
+all:V: setup $LIB $SERVER
 
 # Create directories
 setup:V:
@@ -55,39 +61,53 @@ $LIB: $OFILES
 
 # Server binary
 $SERVER: cmd/marrow/main.c $LIB
-	$LD -Wall -g -DINCLUDE_CPU_SERVER -DINCLUDE_NAMESPACE \
+	$LD $CFLAGS -DINCLUDE_CPU_SERVER -DINCLUDE_NAMESPACE \
 		-I$INCLUDE -I$SRC cmd/marrow/main.c -L$BUILD -lmarrow -o $target $LDFLAGS
 
 # Compile rules
 $BUILD/9p/%.$O: $SRC/9p/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
 $BUILD/graphics/%.$O: $SRC/graphics/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
 $BUILD/auth/%.$O: $SRC/auth/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
 $BUILD/registry/%.$O: $SRC/registry/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
 $BUILD/platform/%.$O: $SRC/platform/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
 $BUILD/runtime/%.$O: $SRC/runtime/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
 $BUILD/loader/%.$O: $SRC/loader/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
+# Assembly compilation - .S format (GCC/as compatible, using 9c)
 $BUILD/asm/%.$O: $SRC/asm/%.S
-	as --64 $stem.c -o $target
+	$CC -c $CFLAGS $prereq -o $target
 
 $BUILD/sys/%.$O: sys/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
 
 $BUILD/server/%.$O: $SRC/server/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $stem.c -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+
+# Tests
+TESTS=test_link test_loader test_loader_debug test_loader_funcs test_loader_simple \
+	test_minimal test_peb test_segment test_simple test_symbol test_symbol_debug
+
+TEST_BINS=${TESTS:%=$BUILD/tests/%}
+
+$BUILD/tests/%: tests/%.c $LIB
+	mkdir -p $BUILD/tests
+	$CC $CFLAGS -I$INCLUDE -I$SRC tests/$stem.c -L$BUILD -lmarrow -o $target $LDFLAGS -lm
+
+test:V: $LIB ${TEST_BINS}
+	sh tests/run_tests.sh ${TEST_BINS}
 
 # Clean
 clean:V:

@@ -19,10 +19,8 @@
  * Read handler for /dev/kbd
  * Returns key events in Plan 9 format
  */
-static ssize_t devkbd_read(char *buf, size_t count, uint64_t offset, void *data)
+static ssize_t devkbd_read(char *buf, size_t count, uint64_t offset)
 {
-    (void)data;
-
     /* For now, return no keyboard data */
     if (offset >= 0) {
         return 0;
@@ -83,10 +81,9 @@ static ssize_t forward_to_wm_kbd(const char *buf, size_t count)
  * Write handler for /dev/kbd
  * Forwards keyboard events to Kryon WM if running
  */
-static ssize_t devkbd_write(const char *buf, size_t count, uint64_t offset, void *data)
+static ssize_t devkbd_write(const char *buf, size_t count, uint64_t offset)
 {
     (void)offset;
-    (void)data;
 
     if (buf == NULL || count == 0) {
         return 0;

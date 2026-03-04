@@ -299,9 +299,16 @@ int p9exe_load_symbols(FILE *fp, PEB *peb, const P9Header *header)
         type = sym_buffer[offset];
         offset += 1;
 
-        /* Extract name (null-terminated) */
+        /* Extract name (null-terminated) — bounded scan to avoid overread */
         name = (char *)(sym_buffer + offset);
-        name_len = strlen(name);
+        name_len = 0;
+        while (offset + name_len < syms_size && sym_buffer[offset + name_len] != '\0')
+            name_len++;
+        if (offset + name_len >= syms_size) {
+            fprintf(stderr, "p9exe_load_symbols: name not null-terminated\n");
+            result = -1;
+            break;
+        }
         offset += name_len + 1;  /* +1 for null terminator */
 
         /* Add to symbol table */
@@ -567,8 +574,9 @@ PEB *p9_load_executable_from_memory(const uint8_t *buffer, size_t size,
 
     /* Copy text segment */
     if (header.text > 0) {
+        /* Allocate with RW first, then make RX after copying */
         if (peb_alloc_segment(peb, &peb->text, header.text,
-                             P9_PERM_READ | P9_PERM_EXEC) < 0) {
+                             P9_PERM_READ | P9_PERM_WRITE) < 0) {
             fprintf(stderr, "p9_load_executable_from_memory: text alloc failed\n");
             peb_destroy(peb);
             return NULL;
@@ -576,6 +584,13 @@ PEB *p9_load_executable_from_memory(const uint8_t *buffer, size_t size,
 
         memcpy(peb->text.base, buffer + offset, header.text);
         offset += header.text;
+
+        if (mprotect(peb->text.base, peb->text.size,
+                    PROT_READ | PROT_EXEC) < 0) {
+            perror("p9_load_executable_from_memory: mprotect text to RX failed");
+            peb_destroy(peb);
+            return NULL;
+        }
     }
 
     /* Copy data segment */

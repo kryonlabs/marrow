@@ -513,7 +513,7 @@ int main(int argc, char **argv)
     }
 
     /* Initialize graphics - create screen buffer */
-    screen_rect = Rect(0, 0, 800, 600);
+    screen_rect = Rect(0, 0, 2048, 2048);
     screen = memimage_alloc(screen_rect, RGBA32);
     if (screen == NULL) {
         fprintf(stderr, "Error: failed to allocate screen\n");

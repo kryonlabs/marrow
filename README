@@ -68,15 +68,26 @@ man/                 - Plan 9 style manual pages
 
 REQUIREMENTS
 
-    - GCC or TCC (C89/C90)
-    - OpenSSL (libcrypto) - for dp9ik Ed448
+    - GCC/TCC OR Plan 9 compilers (9c/9l/9a via plan9port)
+    - OpenSSL (libcrypto) - for dp9ik Ed448 authentication
     - Linux (primary platform)
 
 BUILD
 
-    make                - Build marrow binary
+TaijiOS supports dual compiler toolchains:
+
+GCC (Linux):
+    make                - Build marrow binary with GCC
     make clean          - Clean build artifacts
     make run            - Build and run on port 17010
+
+Plan 9 compilers (requires plan9port):
+    make                - Build with Plan 9 compilers (auto-detected)
+    USE_GCC=1 make      - Force GCC build even if 9c available
+
+The build system auto-detects available compilers. For Plan 9 builds:
+- OpenSSL → Pure C crypto primitives (SHA-256/512)
+- Assembly uses Plan 9 syntax (.s files)
 
 Binary: bin/marrow
 

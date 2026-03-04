@@ -16,11 +16,10 @@
  * Read handler for /dev/time
  * Returns current Unix timestamp followed by newline
  */
-static ssize_t devtime_read(char *buf, size_t count, uint64_t offset, void *data)
+static ssize_t devtime_read(char *buf, size_t count, uint64_t offset)
 {
     char tbuf[32];
     int len;
-    (void)data;
 
     len = snprintf(tbuf, sizeof(tbuf), "%ld\n", (long)time(NULL));
     if (len < 0) return -1;
@@ -35,12 +34,11 @@ static ssize_t devtime_read(char *buf, size_t count, uint64_t offset, void *data
 /*
  * Write handler for /dev/time - read-only device
  */
-static ssize_t devtime_write(const char *buf, size_t count, uint64_t offset, void *data)
+static ssize_t devtime_write(const char *buf, size_t count, uint64_t offset)
 {
     (void)buf;
     (void)count;
     (void)offset;
-    (void)data;
     return -1;
 }
 
@@ -48,13 +46,13 @@ static ssize_t devtime_write(const char *buf, size_t count, uint64_t offset, voi
  * Read handler for /dev/date
  * Returns today's date as YYYY-MM-DD followed by newline
  */
-static ssize_t devdate_read(char *buf, size_t count, uint64_t offset, void *data)
+static ssize_t devdate_read(char *buf, size_t count, uint64_t offset)
 {
     char tbuf[16];
     int len;
     time_t t;
     struct tm *tm;
-    (void)data;
+
     t = time(NULL);
     tm = localtime(&t);
     if (tm == NULL) return -1;

@@ -36,7 +36,7 @@ typedef struct {
 /*
  * Rectangle constructors (inline functions for C89 compatibility)
  */
-static __attribute__((unused)) Point Pt_func(int x, int y)
+static Point Pt_func(int x, int y)
 {
     Point p;
     p.x = x;
@@ -44,7 +44,7 @@ static __attribute__((unused)) Point Pt_func(int x, int y)
     return p;
 }
 
-static __attribute__((unused)) Rectangle Rect_func(int x0, int y0, int x1, int y1)
+static Rectangle Rect_func(int x0, int y0, int x1, int y1)
 {
     Rectangle r;
     r.min.x = x0;
@@ -154,7 +154,7 @@ typedef struct Subfont {
     unsigned char height;   /* height of image */
     char ascent;    /* top of image to baseline */
     Fontchar *info; /* n+1 Fontchars */
-    Memimage *bits; /* font image (GREY1 or GREY8) */
+    unsigned char *bits; /* raw bitmap data */
 } Subfont;
 
 /*

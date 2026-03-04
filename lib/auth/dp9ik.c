@@ -23,6 +23,7 @@
 #include "auth_dp9ik.h"
 #include "ed448.h"
 #include "devfactotum.h"
+#include "sha2.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,6 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/hmac.h>
-#include <openssl/sha.h>
 #include <openssl/kdf.h>
 #endif
 
@@ -613,7 +613,6 @@ char *dp9ik_find_password(const char *user, const char *dom)
 int dp9ik_passtokey(const unsigned char *password, size_t pwlen,
                     const char *user, unsigned char *key, size_t keylen)
 {
-#ifdef USE_OPENSSL
     /* Hash password+user to a key using SHA-256 */
     SHA256_CTX ctx;
     unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -624,10 +623,6 @@ int dp9ik_passtokey(const unsigned char *password, size_t pwlen,
     if (keylen > SHA256_DIGEST_LENGTH) keylen = SHA256_DIGEST_LENGTH;
     memcpy(key, hash, keylen);
     return 0;
-#else
-    (void)password; (void)pwlen; (void)user; (void)key; (void)keylen;
-    return -1;
-#endif
 }
 
 int dp9ik_authpak_hash(unsigned char *key, const char *user)
