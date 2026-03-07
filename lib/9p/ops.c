@@ -3,6 +3,9 @@
  */
 
 #include "lib9p.h"
+#include "fid_state.h"
+#include "devmouse.h"
+#include "devkbd.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,7 +68,11 @@ int fid_init(void)
         fid_table[i].client_fd = -1; /* -1 indicates slot is empty */
         fid_table[i].is_open = 0;
         fid_table[i].mode = 0;
+        fid_table[i].fid_state = NULL;  /* Initialize FID state */
     }
+
+    /* Initialize FID state subsystem */
+    fid_state_init();
 
     fid_table_initialized = 1;
     return 0;
@@ -80,6 +87,11 @@ void fid_cleanup_conn(int client_fd)
     int cleared = 0;
     for (i = 0; i < P9_MAX_FID; i++) {
         if (fid_table[i].node != NULL && fid_table[i].client_fd == client_fd) {
+            /* Cleanup FID state */
+            if (fid_table[i].fid_state != NULL) {
+                fid_state_destroy(fid_table[i].fid_state);
+                fid_table[i].fid_state = NULL;
+            }
             fid_table[i].node = NULL;
             fid_table[i].client_fd = -1;
             fid_table[i].is_open = 0;
@@ -125,6 +137,7 @@ P9Fid *fid_new(uint32_t fid_num, P9Node *node)
     fid_table[free_slot].client_fd = current_client_fd;
     fid_table[free_slot].is_open = 0;
     fid_table[free_slot].mode = 0;
+    fid_table[free_slot].fid_state = NULL;  /* Initialize FID state */
 
     fprintf(stderr, "fid_new: created FID %u for client_fd=%d in slot %d\n",
             fid_num, current_client_fd, free_slot);
@@ -177,6 +190,13 @@ int fid_clunk(uint32_t fid_num)
             if (fid_table[i].is_open) {
                 /* Note: fd field not used in current implementation */
                 /* close(fid_table[i].fd); */
+            }
+
+            /* Cleanup FID state */
+            if (fid_table[i].fid_state != NULL) {
+                fprintf(stderr, "fid_clunk: Cleaning up FID state for fid=%u\n", fid_num);
+                fid_state_destroy(fid_table[i].fid_state);
+                fid_table[i].fid_state = NULL;
             }
 
             fid_table[i].node = NULL;
@@ -452,6 +472,8 @@ size_t handle_topen(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
     P9Hdr hdr;
     P9Fid *fid_obj;
     P9Node *node;
+    char path[P9_MAX_STR];
+    FIDState *fid_state;
 
     /* Parse request */
     if (p9_parse_header(in_buf, in_len, &hdr) < 0) {
@@ -482,6 +504,43 @@ size_t handle_topen(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
     fid_obj->is_open = 1;
     fid_obj->mode = mode;
 
+    /* Create FID state for streaming devices */
+    if (node_get_path(node, path, sizeof(path)) == 0) {
+        if (is_streaming_device(node)) {
+            fprintf(stderr, "handle_topen: Creating FID state for %s\n", path);
+
+            fid_state = fid_state_create(fid, current_client_fd, node);
+            if (fid_state == NULL) {
+                return p9_build_rerror(out_buf, hdr.tag, "out of memory");
+            }
+
+            fid_state_set_stream(fid_state, 1);
+
+            /* Create device-specific state */
+            if (strcmp(path, "/dev/mouse") == 0) {
+                MouseFIDState *mouse_state = devmouse_create_fid_state();
+                if (mouse_state == NULL) {
+                    fid_state_destroy(fid_state);
+                    return p9_build_rerror(out_buf, hdr.tag, "out of memory");
+                }
+                fid_state_set_device(fid_state, mouse_state,
+                                    (void (*)(void*))devmouse_destroy_fid_state);
+                fprintf(stderr, "handle_topen: Created mouse FID state\n");
+            } else if (strcmp(path, "/dev/kbd") == 0) {
+                KbdFIDState *kbd_state = devkbd_create_fid_state();
+                if (kbd_state == NULL) {
+                    fid_state_destroy(fid_state);
+                    return p9_build_rerror(out_buf, hdr.tag, "out of memory");
+                }
+                fid_state_set_device(fid_state, kbd_state,
+                                    (void (*)(void*))devkbd_destroy_fid_state);
+                fprintf(stderr, "handle_topen: Created keyboard FID state\n");
+            }
+
+            fid_obj->fid_state = fid_state;
+        }
+    }
+
     /* Use iounit=0 to indicate no preferred I/O size */
     /* Let the client decide the optimal chunk size */
     return p9_build_ropen(out_buf, hdr.tag, &node->qid, 0);
@@ -490,8 +549,8 @@ size_t handle_topen(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
 /*
  * Forward declarations for tree functions
  */
-extern ssize_t node_read(P9Node *node, char *buf, size_t count, uint64_t offset);
-extern ssize_t node_write(P9Node *node, const char *buf, size_t count, uint64_t offset);
+extern ssize_t node_read(P9Node *node, char *buf, size_t count, uint64_t offset, void *fid_ctx);
+extern ssize_t node_write(P9Node *node, const char *buf, size_t count, uint64_t offset, void *fid_ctx);
 
 /*
  * Handle Tread for directories
@@ -584,6 +643,7 @@ size_t handle_tread(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
     P9Node *node;
     ssize_t nread;
     char data[P9_MAX_MSG];
+    void *fid_ctx;
 
     /* Parse request */
     if (p9_parse_header(in_buf, in_len, &hdr) < 0) {
@@ -612,8 +672,14 @@ size_t handle_tread(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
         count = negotiated_msize - 24;
     }
 
-    /* Read from file */
-    nread = node_read(node, data, count, offset);
+    /* Get FID context for device handlers */
+    fid_ctx = NULL;
+    if (fid_obj->fid_state != NULL) {
+        fid_ctx = fid_state_get_device(fid_obj->fid_state);
+    }
+
+    /* Read from file - pass FID context */
+    nread = node_read(node, data, count, offset, fid_ctx);
     if (nread < 0) {
         fprintf(stderr, "handle_tread: read error for node '%s'\n", node->name);
         return p9_build_rerror(out_buf, hdr.tag, "read error");
@@ -657,8 +723,8 @@ size_t handle_twrite(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
         return p9_build_rerror(out_buf, hdr.tag, "is directory");
     }
 
-    /* Write to file */
-    nwritten = node_write(node, data, count, offset);
+    /* Write to file - no FID context needed for writes */
+    nwritten = node_write(node, data, count, offset, NULL);
     if (nwritten < 0) {
         return p9_build_rerror(out_buf, hdr.tag, "write error");
     }
@@ -683,7 +749,7 @@ size_t handle_tclunk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
         return p9_build_rerror(out_buf, hdr.tag, "invalid Tclunk");
     }
 
-    /* Clunk FID */
+    /* Clunk FID (will cleanup FID state) */
     if (fid_clunk(fid) < 0) {
         return p9_build_rerror(out_buf, hdr.tag, "fid not found");
     }

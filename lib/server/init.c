@@ -50,6 +50,7 @@ extern int devkbd_init(P9Node *dev_dir);
 extern int devaudio_init(P9Node *dev_dir);
 extern int devdraw_new_init(P9Node *draw_dir);
 extern int devtime_init(P9Node *dev_dir);
+extern int devrendezvous_init(P9Node *dev_dir);
 extern int svc_init(P9Node *root);
 
 /*
@@ -257,6 +258,12 @@ int marrow_init_subsystems(MarrowInstance *instance)
     if (devtime_init(dev_dir) < 0) {
         if (instance->config.log_callback) {
             instance->config.log_callback("Failed to initialize /dev/time", MARROW_LOG_WARN);
+        }
+    }
+
+    if (devrendezvous_init(dev_dir) < 0) {
+        if (instance->config.log_callback) {
+            instance->config.log_callback("Failed to initialize /dev/rendezvous", MARROW_LOG_WARN);
         }
     }
 

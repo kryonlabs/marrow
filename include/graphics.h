@@ -223,6 +223,7 @@ typedef struct DrawConnection {
     int refresh_enabled;          /* Refresh flag */
     int screen_dirty;             /* Flag: screen needs refresh */
     uint32_t qid_path_base;       /* Base QID path for this connection's files */
+    Rectangle viewport;           /* App viewport rectangle */
     DrawImage images[MAX_IMAGES_PER_CONNECTION];
     int nimages;
 } DrawConnection;
@@ -236,6 +237,8 @@ DrawConnection *drawconn_new(void);
 DrawConnection *drawconn_get(int id);
 void drawconn_delete(int id);
 int drawconn_next_id(void);
+int drawconn_set_viewport(int id, int width, int height);
+void drawconn_update_screen(Memimage *screen);  /* Update screen after resize */
 
 /*
  * Screen refresh notification
@@ -247,6 +250,8 @@ void drawconn_mark_dirty_all(void);
  */
 int devscreen_init(P9Node *dev_dir, Memimage *screen);
 void devscreen_cleanup(void);
+Memimage *devscreen_get_screen(void);  /* Get current screen (for dynamic resizing) */
+int devscreen_set_screen(Memimage *screen);  /* Update screen reference */
 int devmouse_init(P9Node *dev_dir);
 int devkbd_init(P9Node *dev_dir);
 int devdraw_new_init(P9Node *draw_dir);

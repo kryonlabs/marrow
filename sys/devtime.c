@@ -1,11 +1,13 @@
 /*
- * Marrow Time Device (/dev/time)
+ * Marrow Time Device (/dev/time, /dev/nsec)
  * C89/C90 compliant
  *
  * Read-only device that returns current Unix timestamp as ASCII.
  * Plan 9 style: read /dev/time to get the current time.
+ * /dev/nsec returns monotonic nanoseconds (used by p9sys_nsec).
  */
 
+#define _POSIX_C_SOURCE 199309L  /* for struct timespec, clock_gettime */
 #include "lib9p.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +18,7 @@
  * Read handler for /dev/time
  * Returns current Unix timestamp followed by newline
  */
-static ssize_t devtime_read(char *buf, size_t count, uint64_t offset)
+static ssize_t devtime_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     char tbuf[32];
     int len;
@@ -34,7 +36,7 @@ static ssize_t devtime_read(char *buf, size_t count, uint64_t offset)
 /*
  * Write handler for /dev/time - read-only device
  */
-static ssize_t devtime_write(const char *buf, size_t count, uint64_t offset)
+static ssize_t devtime_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     (void)buf;
     (void)count;
@@ -46,7 +48,7 @@ static ssize_t devtime_write(const char *buf, size_t count, uint64_t offset)
  * Read handler for /dev/date
  * Returns today's date as YYYY-MM-DD followed by newline
  */
-static ssize_t devdate_read(char *buf, size_t count, uint64_t offset)
+static ssize_t devdate_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     char tbuf[16];
     int len;
@@ -66,12 +68,35 @@ static ssize_t devdate_read(char *buf, size_t count, uint64_t offset)
 }
 
 /*
- * Initialize /dev/time and /dev/date
+ * Read handler for /dev/nsec
+ * Returns monotonic nanoseconds as ASCII, for use by p9sys_nsec.
+ */
+static ssize_t devnsec_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
+{
+    char tbuf[32];
+    int len;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    len = snprintf(tbuf, sizeof(tbuf), "%lld\n",
+                   (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec);
+    if (len < 0) return -1;
+
+    if (offset >= (uint64_t)len) return 0;
+    if (offset + count > (uint64_t)len) count = (size_t)(len - (int)offset);
+
+    memcpy(buf, tbuf + offset, count);
+    return (ssize_t)count;
+}
+
+/*
+ * Initialize /dev/time, /dev/date, and /dev/nsec
  */
 int devtime_init(P9Node *dev_dir)
 {
     P9Node *time_file;
     P9Node *date_file;
+    P9Node *nsec_file;
 
     if (dev_dir == NULL) {
         return -1;
@@ -91,6 +116,13 @@ int devtime_init(P9Node *dev_dir)
         return -1;
     }
 
-    fprintf(stderr, "devtime_init: initialized /dev/time and /dev/date\n");
+    nsec_file = tree_create_file(dev_dir, "nsec", NULL,
+                                  devnsec_read,
+                                  NULL);  /* read-only */
+    if (nsec_file == NULL) {
+        return -1;
+    }
+
+    fprintf(stderr, "devtime_init: initialized /dev/time, /dev/date, /dev/nsec\n");
     return 0;
 }

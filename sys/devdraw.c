@@ -50,6 +50,37 @@ void drawconn_cleanup(void)
     g_screen = NULL;
 }
 
+/*
+ * Update screen reference after resize
+ * Called by devscreen when screen is resized via /dev/screen/ctl
+ */
+void drawconn_update_screen(Memimage *screen)
+{
+    int i;
+
+    if (screen == NULL) {
+        fprintf(stderr, "drawconn_update_screen: screen is NULL\n");
+        return;
+    }
+
+    g_screen = screen;
+
+    /* Update all existing connections to use the new screen */
+    for (i = 0; i < MAX_DRAW_CONNECTIONS; i++) {
+        if (g_connections[i] != NULL) {
+            g_connections[i]->screen = screen;
+            /* Update viewport to match new screen dimensions */
+            g_connections[i]->viewport.min.x = 0;
+            g_connections[i]->viewport.min.y = 0;
+            g_connections[i]->viewport.max.x = screen->r.max.x;
+            g_connections[i]->viewport.max.y = screen->r.max.y;
+        }
+    }
+
+    fprintf(stderr, "drawconn_update_screen: updated screen reference to %dx%d\n",
+            Dx(screen->r), Dy(screen->r));
+}
+
 int drawconn_next_id(void)
 {
     int id;
@@ -90,6 +121,12 @@ DrawConnection *drawconn_new(void)
     conn->refresh_enabled = 1;  /* Enable refresh by default */
     conn->screen_dirty = 1;    /* Mark as dirty initially */
     conn->nimages = 0;
+
+    /* Initialize viewport to full physical screen */
+    conn->viewport.min.x = 0;
+    conn->viewport.min.y = 0;
+    conn->viewport.max.x = g_screen->r.max.x;
+    conn->viewport.max.y = g_screen->r.max.y;
 
     /* QID path base: use high bits to avoid collision */
     conn->qid_path_base = 0x10000000ULL + ((uint64_t)id << 16);
@@ -166,13 +203,13 @@ static int build_connection_info(DrawConnection *conn, char *buf, int size)
     /* String 2: repl flag */
     sprintf(buf + pos, "0"); pos += 12;
     /* String 3: min.x */
-    sprintf(buf + pos, "%d", conn->screen->r.min.x); pos += 12;
+    sprintf(buf + pos, "%d", conn->viewport.min.x); pos += 12;
     /* String 4: min.y */
-    sprintf(buf + pos, "%d", conn->screen->r.min.y); pos += 12;
+    sprintf(buf + pos, "%d", conn->viewport.min.y); pos += 12;
     /* String 5: max.x */
-    sprintf(buf + pos, "%d", conn->screen->r.max.x); pos += 12;
+    sprintf(buf + pos, "%d", conn->viewport.max.x); pos += 12;
     /* String 6: max.y */
-    sprintf(buf + pos, "%d", conn->screen->r.max.y); pos += 12;
+    sprintf(buf + pos, "%d", conn->viewport.max.y); pos += 12;
     /* String 7: clip.min.x */
     sprintf(buf + pos, "%d", conn->screen->clipr.min.x); pos += 12;
     /* String 8: clip.min.y */
@@ -189,41 +226,83 @@ static int build_connection_info(DrawConnection *conn, char *buf, int size)
 
 ssize_t devdraw_new_read(char *buf, size_t count, uint64_t offset, void *data)
 {
-    DrawConnection *conn;
-    char info[144];
-    int info_len;
+    char default_handshake[144];
     size_t to_copy;
+    Memimage *current_screen;
 
     (void)data;
-    (void)offset;
 
-    fprintf(stderr, "devdraw_new_read: drawterm requesting new connection\n");
-
-    /* Create new connection */
-    conn = drawconn_new();
-    if (conn == NULL) {
-        fprintf(stderr, "devdraw_new_read: failed to create connection\n");
-        return -1;
+    /* Get current screen (may have been resized) */
+    current_screen = devscreen_get_screen();
+    if (current_screen == NULL) {
+        current_screen = g_screen;  /* Fallback to initial screen */
     }
 
-    /* Build connection info */
-    info_len = build_connection_info(conn, info, sizeof(info));
-    if (info_len < 0) {
-        fprintf(stderr, "devdraw_new_read: failed to build info\n");
-        return -1;
+    /* Build handshake dynamically (describe physical screen) */
+    /* IMPORTANT: Rebuild on every read to pick up screen resizes */
+    memset(default_handshake, 0, 144);
+    {
+        int pos = 0;
+
+        /* Field 0: image name */
+        sprintf(default_handshake + pos, "screen"); pos += 12;
+
+        /* Field 1: channel format */
+        sprintf(default_handshake + pos, "RGBA32"); pos += 12;
+
+        /* Field 2: repl flag */
+        sprintf(default_handshake + pos, "0"); pos += 12;
+
+        /* Field 3: RESERVED (client expects this to be empty/0) */
+        sprintf(default_handshake + pos, "0"); pos += 12;
+
+        /* Field 4: screen min.x - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->r.min.x); pos += 12;
+
+        /* Field 5: screen min.y - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->r.min.y); pos += 12;
+
+        /* Field 6: screen max.x - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->r.max.x); pos += 12;
+
+        /* Field 7: screen max.y - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->r.max.y); pos += 12;
+
+        /* Field 8: clip min.x - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->clipr.min.x); pos += 12;
+
+        /* Field 9: clip min.y - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->clipr.min.y); pos += 12;
+
+        /* Field 10: clip max.x - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->clipr.max.x); pos += 12;
+
+        /* Field 11: clip max.y - READ FROM current screen */
+        sprintf(default_handshake + pos, "%d", current_screen->clipr.max.y); pos += 12;
     }
 
-    /* Copy to user buffer */
-    to_copy = (size_t)info_len;
+    /* Debug: print the handshake with ACTUAL dimensions (only on first read of offset 0) */
+    if (offset == 0) {
+        fprintf(stderr, "devdraw_new_read: handshake dump:\n");
+        fprintf(stderr, "  Field 4 (min.x): '%.12s' (buf+48)\n", default_handshake + 48);
+        fprintf(stderr, "  Field 5 (min.y): '%.12s' (buf+60)\n", default_handshake + 60);
+        fprintf(stderr, "  Field 6 (max.x): '%.12s' (buf+72)\n", default_handshake + 72);
+        fprintf(stderr, "  Field 7 (max.y): '%.12s' (buf+84)\n", default_handshake + 84);
+        fprintf(stderr, "  Actual dimensions: %dx%d\n",
+                current_screen->r.max.x - current_screen->r.min.x,
+                current_screen->r.max.y - current_screen->r.min.y);
+    }
+
+    if (offset >= 144) {
+        return 0;  /* EOF */
+    }
+
+    to_copy = 144 - offset;
     if (to_copy > count) {
         to_copy = count;
     }
 
-    memcpy(buf, info, to_copy);
-
-    fprintf(stderr, "devdraw_new_read: returning %d bytes for connection %d\n",
-            (int)to_copy, conn->id);
-
+    memcpy(buf, default_handshake + offset, to_copy);
     return (ssize_t)to_copy;
 }
 
@@ -416,6 +495,16 @@ ssize_t devdraw_ctl_write(const char *buf, size_t count, uint64_t offset, void *
     } else if (strcmp(cmd, "norefresh") == 0) {
         conn->refresh_enabled = 0;
         fprintf(stderr, "devdraw_ctl_write: conn %d refresh disabled\n", conn->id);
+    } else if (strncmp(cmd, "viewport ", 9) == 0) {
+        int w, h;
+        if (sscanf(cmd + 9, "%d %d", &w, &h) == 2) {
+            conn->viewport.min.x = 0;
+            conn->viewport.min.y = 0;
+            conn->viewport.max.x = w;
+            conn->viewport.max.y = h;
+            fprintf(stderr, "devdraw_ctl_write: conn %d viewport set to %dx%d\n",
+                    conn->id, w, h);
+        }
     } else {
         fprintf(stderr, "devdraw_ctl_write: conn %d unknown command '%s'\n", conn->id, cmd);
     }
@@ -1233,9 +1322,9 @@ ssize_t devdraw_refresh_read(char *buf, size_t count, uint64_t offset, void *dat
 
     msg = (uint32_t *)buf;
 
-    /* Get screen dimensions */
-    width = conn->screen->r.max.x - conn->screen->r.min.x;
-    height = conn->screen->r.max.y - conn->screen->r.min.y;
+    /* Get viewport dimensions */
+    width = conn->viewport.max.x - conn->viewport.min.x;
+    height = conn->viewport.max.y - conn->viewport.min.y;
 
     /* Build Plan 9 refresh rectangle */
     msg[0] = 0;       /* image_id (0 = screen) */
@@ -1269,6 +1358,34 @@ void drawconn_mark_dirty_all(void)
     }
 
     (void)count;
+}
+
+/*
+ * Set viewport dimensions for a connection
+ * This allows the WM to specify the app viewport size
+ */
+int drawconn_set_viewport(int id, int width, int height)
+{
+    DrawConnection *conn;
+
+    if (width <= 0 || height <= 0) {
+        return -1;
+    }
+
+    conn = drawconn_get(id);
+    if (conn == NULL) {
+        return -1;
+    }
+
+    conn->viewport.min.x = 0;
+    conn->viewport.min.y = 0;
+    conn->viewport.max.x = width;
+    conn->viewport.max.y = height;
+
+    fprintf(stderr, "drawconn_set_viewport: conn %d viewport set to %dx%d\n",
+            id, width, height);
+
+    return 0;
 }
 
 /*

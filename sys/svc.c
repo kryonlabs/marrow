@@ -32,7 +32,7 @@ static int discover_buf_len = 0;
  * Read handler for /svc/discover
  * Returns list of registered services
  */
-static ssize_t svc_discover_read(char *buf, size_t count, uint64_t offset)
+static ssize_t svc_discover_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     ServiceInfo *services;
     int i, num_services;
@@ -78,7 +78,7 @@ static ssize_t svc_discover_read(char *buf, size_t count, uint64_t offset)
 /*
  * Read handler for /svc/ctl (returns status)
  */
-static ssize_t svc_ctl_read(char *buf, size_t count, uint64_t offset)
+static ssize_t svc_ctl_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     static char status_buf[256];
     static int buf_filled = 0;
@@ -107,7 +107,7 @@ static ssize_t svc_ctl_read(char *buf, size_t count, uint64_t offset)
  * Write handler for /svc/ctl
  * Register/unregister services, mount service filesystems
  */
-static ssize_t svc_ctl_write(const char *buf, size_t count, uint64_t offset)
+static ssize_t svc_ctl_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     char cmd[256];
     char name[64], type[32], path[256];

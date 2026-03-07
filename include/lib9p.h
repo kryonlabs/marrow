@@ -84,7 +84,7 @@ typedef struct {
 #define QTEXCL      0x20    /* Exclusive use */
 #define QTMOUNT     0x10    /* Mount point */
 #define QTAUTH      0x08    /* Authentication file */
-#define QTTMP       0x04    /* Temporary file */
+#define QTTMP       0x04    /* Temporary */
 #define QTSYMLINK   0x02    /* Symbolic link */
 #define QTFILE      0x00    /* Plain file */
 
@@ -128,9 +128,10 @@ typedef struct P9Node {
 } P9Node;
 
 /*
- * Forward declarations for authentication
+ * Forward declarations for authentication and FID state
  */
 struct AuthInfo;
+typedef struct FIDState FIDState;
 
 /*
  * FID (File ID) tracking
@@ -142,6 +143,7 @@ typedef struct {
     int         is_open;
     uint8_t     mode;   /* Open mode if open */
     struct AuthInfo *auth_info;  /* Authentication info */
+    FIDState    *fid_state;  /* Per-FID state for streaming devices */
 } P9Fid;
 
 /*
@@ -162,10 +164,10 @@ typedef struct {
 } P9Stat;
 
 /*
- * File operation handlers
+ * File operation handlers (UPDATED: now include fid_ctx parameter)
  */
-typedef ssize_t (*P9ReadFunc)(char *buf, size_t count, uint64_t offset);
-typedef ssize_t (*P9WriteFunc)(const char *buf, size_t count, uint64_t offset);
+typedef ssize_t (*P9ReadFunc)(char *buf, size_t count, uint64_t offset, void *fid_ctx);
+typedef ssize_t (*P9WriteFunc)(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
 
 /*
  * Endianness conversion (9P uses big-endian/network byte order)
@@ -224,16 +226,16 @@ P9Node *tree_lookup(P9Node *root, const char *path);
 P9Node *tree_walk(P9Node *node, const char *name);
 P9Node *tree_create_dir(P9Node *parent, const char *name);
 P9Node *tree_create_file(P9Node *parent, const char *name, void *data,
-                         ssize_t (*read)(char *, size_t, uint64_t),
-                         ssize_t (*write)(const char *, size_t, uint64_t));
+                         ssize_t (*read)(char *, size_t, uint64_t, void *),
+                         ssize_t (*write)(const char *, size_t, uint64_t, void *));
 int tree_add_child(P9Node *parent, P9Node *child);
 int tree_remove_node(P9Node *node);
 
 /*
- * Node operations
+ * Node operations (UPDATED: now include fid_ctx parameter)
  */
-ssize_t node_read(P9Node *node, char *buf, size_t count, uint64_t offset);
-ssize_t node_write(P9Node *node, const char *buf, size_t count, uint64_t offset);
+ssize_t node_read(P9Node *node, char *buf, size_t count, uint64_t offset, void *fid_ctx);
+ssize_t node_write(P9Node *node, const char *buf, size_t count, uint64_t offset, void *fid_ctx);
 
 /*
  * FID management
@@ -313,9 +315,9 @@ int process_draw_messages(DrawConnection *conn, const char *buf, size_t count,
  * /dev/audio implementation (9front compatible)
  */
 int devaudio_init(P9Node *dev_dir);
-ssize_t devaudio_read(char *buf, size_t count, uint64_t offset);
-ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset);
-ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset);
-ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset);
+ssize_t devaudio_read(char *buf, size_t count, uint64_t offset, void *fid_ctx);
+ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
+ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset, void *fid_ctx);
+ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
 
 #endif /* LIB9P_H */

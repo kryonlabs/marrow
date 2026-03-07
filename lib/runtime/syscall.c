@@ -8,6 +8,7 @@
  * Based on 9front sys/src/9/port/sysfile.c patterns
  */
 
+#define _GNU_SOURCE  /* for syscall(), usleep(), struct timespec */
 #include "runtime/syscall.h"
 #include "lib9p.h"
 #include "p9/p9compat.h"
@@ -21,17 +22,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <sys/syscall.h>
-#include <sys/wait.h>
+#include <sys/syscall.h>  /* for SYS_brk (binary loading - Layer 1 keep) */
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
-
-/* Futex constants (avoid depending on linux/futex.h) */
-#ifndef FUTEX_WAIT
-#define FUTEX_WAIT 0
-#define FUTEX_WAKE 1
-#endif
 
 /* Plan 9 pread/pwrite: offset == -1 means "use current position" */
 #define P9_NOSEEK ((int64_t)-1LL)
@@ -45,18 +39,11 @@
 #define P9_RFMEM    (1<<5)
 #define P9_RFNOWAIT (1<<6)
 
-/* Rendezvous table */
-#define P9_REND_SIZE 32
-
-typedef struct {
-    volatile uint64_t tag;
-    volatile uint64_t val;
-    volatile int      futex;
-    volatile int      active;
-} P9RendSlot;
-
-static P9RendSlot g_rendtable[P9_REND_SIZE];
-static volatile int g_rendlock = 0;
+/* Rendezvous and semaphore primitives — implemented in sys/devrendezvous.c */
+extern int64_t devrendezvous_call(uint64_t tag, uint64_t val);
+extern int64_t devrendezvous_semacquire(int *addr, int block);
+extern int64_t devrendezvous_semrelease(int *addr, int count);
+extern int64_t devrendezvous_tsemacquire(int *addr, uint32_t ms);
 
 /*
  * StaticFileData — dynamic buffer backing a created file
@@ -590,13 +577,13 @@ int64_t p9sys_pread(PEB *peb, int fd, void *buf, int count, int64_t offset)
 
     if (use_seek) {
         /* Use current position and advance after read */
-        result = node_read(node, (char *)buf, (size_t)count, fd_entry->offset);
+        result = node_read(node, (char *)buf, (size_t)count, fd_entry->offset, NULL);
         if (result > 0) {
             fd_entry->offset += (uint64_t)result;
         }
     } else {
         /* Positional read — do not advance fd_entry->offset */
-        result = node_read(node, (char *)buf, (size_t)count, (uint64_t)offset);
+        result = node_read(node, (char *)buf, (size_t)count, (uint64_t)offset, NULL);
     }
 
     return result;
@@ -649,7 +636,7 @@ int64_t p9sys_pwrite(PEB *peb, int fd, const void *buf, int count, int64_t offse
     if (use_seek) {
         /* Use current position and advance after write */
         result = node_write(node, (const char *)buf, (size_t)count,
-                            fd_entry->offset);
+                            fd_entry->offset, NULL);
         if (result > 0) {
             uint64_t end = fd_entry->offset + (uint64_t)result;
             if (end > node->length) node->length = end;
@@ -658,7 +645,7 @@ int64_t p9sys_pwrite(PEB *peb, int fd, const void *buf, int count, int64_t offse
     } else {
         /* Positional write — do not advance fd_entry->offset */
         result = node_write(node, (const char *)buf, (size_t)count,
-                            (uint64_t)offset);
+                            (uint64_t)offset, NULL);
         if (result > 0) {
             uint64_t end = (uint64_t)offset + (uint64_t)result;
             if (end > node->length) node->length = end;
@@ -1610,66 +1597,21 @@ int64_t p9sys_segflush(PEB *peb, void *addr, uint64_t len)
 /*
  * Syscall: rendezvous
  * Two callers meet at the same tag; each gets the other's value.
- * Uses a global table protected by a spinlock and per-slot futex.
+ * Delegates to devrendezvous_call() in sys/devrendezvous.c.
  */
 int64_t p9sys_rendezvous(PEB *peb, uint64_t tag, uint64_t val)
 {
-    int i;
-    uint64_t their_val;
+    int64_t result;
 
     if (peb == NULL) {
         return -1;
     }
 
-    /* Acquire spinlock */
-    while (__sync_lock_test_and_set(&g_rendlock, 1)) {
-        /* spin */
+    result = devrendezvous_call(tag, val);
+    if (result < 0) {
+        p9_set_errstr("rendezvous: table full");
     }
-
-    /* Search for a waiter with matching tag */
-    for (i = 0; i < P9_REND_SIZE; i++) {
-        if (g_rendtable[i].active && g_rendtable[i].tag == tag) {
-            their_val = g_rendtable[i].val;
-            g_rendtable[i].val   = val;  /* hand our value to the waiter */
-            g_rendtable[i].futex = 0;    /* signal wakeup */
-            __sync_lock_release(&g_rendlock);
-            /* Wake the sleeping first caller */
-            syscall(SYS_futex, (int *)&g_rendtable[i].futex,
-                    FUTEX_WAKE, 1, NULL, NULL, 0);
-            return (int64_t)their_val;
-        }
-    }
-
-    /* No waiter found — become the first caller */
-    for (i = 0; i < P9_REND_SIZE; i++) {
-        if (!g_rendtable[i].active) {
-            g_rendtable[i].tag    = tag;
-            g_rendtable[i].val    = val;
-            g_rendtable[i].futex  = 1;
-            g_rendtable[i].active = 1;
-            __sync_lock_release(&g_rendlock);
-
-            /* Sleep until second caller sets futex = 0 */
-            while (__atomic_load_n((int *)&g_rendtable[i].futex,
-                                   __ATOMIC_SEQ_CST)) {
-                syscall(SYS_futex, (int *)&g_rendtable[i].futex,
-                        FUTEX_WAIT, 1, NULL, NULL, 0);
-            }
-
-            their_val = g_rendtable[i].val;
-
-            /* Mark slot free under lock */
-            while (__sync_lock_test_and_set(&g_rendlock, 1)) {}
-            g_rendtable[i].active = 0;
-            __sync_lock_release(&g_rendlock);
-
-            return (int64_t)their_val;
-        }
-    }
-
-    __sync_lock_release(&g_rendlock);
-    p9_set_errstr("rendezvous: table full");
-    return -1;
+    return result;
 }
 
 /*
@@ -1760,37 +1702,27 @@ int64_t p9sys_alarm(PEB *peb, uint32_t ms)
 /*
  * Syscall: semacquire
  * Decrement *addr if > 0, else block (if block==1) or return -1.
+ * Delegates to devrendezvous_semacquire() in sys/devrendezvous.c.
  */
 int64_t p9sys_semacquire(PEB *peb, int *addr, int block)
 {
-    int val;
+    int64_t result;
 
     if (peb == NULL || addr == NULL) {
         return -1;
     }
 
-    for (;;) {
-        val = __atomic_load_n(addr, __ATOMIC_SEQ_CST);
-        if (val > 0) {
-            if (__atomic_compare_exchange_n(addr, &val, val - 1, 0,
-                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
-                return 0;
-            }
-            /* CAS failed — retry */
-            continue;
-        }
-        if (!block) {
-            p9_set_errstr("semacquire: would block");
-            return -1;
-        }
-        /* Block until someone releases */
-        syscall(SYS_futex, addr, FUTEX_WAIT, 0, NULL, NULL, 0);
+    result = devrendezvous_semacquire(addr, block);
+    if (result < 0) {
+        p9_set_errstr("semacquire: would block");
     }
+    return result;
 }
 
 /*
  * Syscall: semrelease
  * Increment *addr by count and wake blocked acquirers.
+ * Delegates to devrendezvous_semrelease() in sys/devrendezvous.c.
  */
 int64_t p9sys_semrelease(PEB *peb, int *addr, int count)
 {
@@ -1798,43 +1730,27 @@ int64_t p9sys_semrelease(PEB *peb, int *addr, int count)
         return -1;
     }
 
-    __atomic_add_fetch(addr, count, __ATOMIC_SEQ_CST);
-    syscall(SYS_futex, addr, FUTEX_WAKE, count, NULL, NULL, 0);
-    return (int64_t)count;
+    return devrendezvous_semrelease(addr, count);
 }
 
 /*
  * Syscall: tsemacquire
  * Like semacquire but with a millisecond timeout.
+ * Delegates to devrendezvous_tsemacquire() in sys/devrendezvous.c.
  */
 int64_t p9sys_tsemacquire(PEB *peb, int *addr, uint32_t ms)
 {
-    int val;
-    struct timespec ts;
-    long rc;
+    int64_t result;
 
     if (peb == NULL || addr == NULL) {
         return -1;
     }
 
-    ts.tv_sec  = (time_t)(ms / 1000U);
-    ts.tv_nsec = (long)((ms % 1000U) * 1000000UL);
-
-    for (;;) {
-        val = __atomic_load_n(addr, __ATOMIC_SEQ_CST);
-        if (val > 0) {
-            if (__atomic_compare_exchange_n(addr, &val, val - 1, 0,
-                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
-                return 0;
-            }
-            continue;
-        }
-        rc = syscall(SYS_futex, addr, FUTEX_WAIT, 0, &ts, NULL, 0);
-        if (rc == -1 && errno == ETIMEDOUT) {
-            p9_set_errstr("tsemacquire: timeout");
-            return -1;
-        }
+    result = devrendezvous_tsemacquire(addr, ms);
+    if (result < 0) {
+        p9_set_errstr("tsemacquire: timeout");
     }
+    return result;
 }
 
 /*
@@ -1945,7 +1861,7 @@ int64_t p9sys_exec(PEB *peb, const char *path, char **argv)
         return -1;
     }
 
-    n = (int64_t)node_read(node, (char *)buf, (size_t)flen, 0);
+    n = (int64_t)node_read(node, (char *)buf, (size_t)flen, 0, NULL);
     if (n <= 0) {
         free(buf);
         p9_set_errstr("exec: read failed");
@@ -1975,15 +1891,35 @@ int64_t p9sys_exec(PEB *peb, const char *path, char **argv)
 }
 
 /*
- * Syscall: _nsec (deprecated)
+ * Syscall: _nsec
  * Returns the current time in nanoseconds (monotonic clock).
+ * Routes through /dev/nsec in the 9P namespace when available.
  */
 int64_t p9sys_nsec(PEB *peb)
 {
-    struct timespec ts;
+    P9Node *dev_dir;
+    P9Node *nsec_node;
+    char buf[32];
+    ssize_t n;
 
     (void)peb;
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
+    dev_dir = tree_walk(tree_root(), "dev");
+    if (dev_dir != NULL) {
+        nsec_node = tree_walk(dev_dir, "nsec");
+        if (nsec_node != NULL) {
+            n = node_read(nsec_node, buf, sizeof(buf) - 1, 0, NULL);
+            if (n > 0) {
+                buf[n] = '\0';
+                return (int64_t)strtoll(buf, NULL, 10);
+            }
+        }
+    }
+
+    /* Fallback: direct call if tree not yet initialized */
+    {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
+    }
 }

@@ -37,6 +37,7 @@ extern int devscreen_init(P9Node *dev_dir, Memimage *screen);
 extern int devmouse_init(P9Node *dev_dir);
 extern int devkbd_init(P9Node *dev_dir);
 extern int devaudio_init(P9Node *dev_dir);
+extern int devdisplay_init(P9Node *dev_dir);
 extern int devdraw_new_init(P9Node *draw_dir);
 extern void drawconn_cleanup(void);
 extern void devscreen_cleanup(void);
@@ -513,7 +514,9 @@ int main(int argc, char **argv)
     }
 
     /* Initialize graphics - create screen buffer */
-    screen_rect = Rect(0, 0, 2048, 2048);
+    /* Start with small default size (640x480) to avoid window sizing issues
+     * if display client connects before WM sets the correct size. */
+    screen_rect = Rect(0, 0, 640, 480);
     screen = memimage_alloc(screen_rect, RGBA32);
     if (screen == NULL) {
         fprintf(stderr, "Error: failed to allocate screen\n");
@@ -600,6 +603,10 @@ int main(int argc, char **argv)
     /* Initialize audio device */
     if (devaudio_init(dev_dir) < 0) {
         fprintf(stderr, "Warning: failed to initialize /dev/audio\n");
+    }
+
+    if (devdisplay_init(dev_dir) < 0) {
+        fprintf(stderr, "Warning: failed to initialize /dev/display\n");
     }
 
     /* Create /mnt directory for service mounting */

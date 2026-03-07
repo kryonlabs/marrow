@@ -46,15 +46,15 @@ int devaudio_init(P9Node *dev_dir);
  * 9P read/write handlers
  * /dev/audio - main audio data stream (compatible with 9front)
  */
-ssize_t devaudio_read(char *buf, size_t count, uint64_t offset);
-ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset);
+ssize_t devaudio_read(char *buf, size_t count, uint64_t offset, void *fid_ctx);
+ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
 
 /*
  * Control file handlers (optional extensions)
  * /dev/audioctl - audio control interface
  */
-ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset);
-ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset);
+ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset, void *fid_ctx);
+ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
 
 /*
  * Volume control (9front style)

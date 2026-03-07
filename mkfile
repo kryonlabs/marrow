@@ -23,11 +23,11 @@ LIB=$BUILD/libmarrow.a
 SERVER=$BIN/marrow
 
 # Source files by module (paths relative to $SRC)
-MARROW_9P=9p/protocol 9p/ops 9p/tree
+MARROW_9P=9p/protocol 9p/ops 9p/tree 9p/fid_state
 MARROW_GRAPHICS=graphics/memdraw graphics/memimage graphics/pixconv
-MARROW_AUTH=auth/ed448 auth/dp9ik auth/p9any auth/session auth/factotum auth/keys auth/secstore auth/p9sk1
+MARROW_AUTH=auth/ed448 auth/sha2 auth/dp9ik auth/p9any auth/session auth/factotum auth/keys auth/secstore auth/p9sk1
 MARROW_REGISTRY=registry/cpu registry/rcpu registry/namespace registry/service registry/discovery registry/mount
-MARROW_SYS=sys/console sys/fd sys/proc sys/env sys/svc sys/devdraw sys/devscreen sys/devmouse sys/devkbd sys/devaudio sys/devtime
+MARROW_SYS=sys/console sys/fd sys/proc sys/env sys/svc sys/devdraw sys/devscreen sys/devmouse sys/devkbd sys/devaudio sys/devtime sys/devrendezvous sys/devdisplay
 MARROW_PLATFORM=platform/socket
 MARROW_RUNTIME=runtime/peb runtime/context runtime/syscall runtime/p9compat
 MARROW_LOADER=loader/p9exec

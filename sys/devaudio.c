@@ -220,7 +220,7 @@ static int init_audio(int channels)
  * 9front compatible: accepts 16-bit little-endian PCM
  * Default format: stereo, 44100 Hz
  */
-ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset)
+ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     SoundState *state = &g_audio_state;
 
@@ -343,7 +343,7 @@ ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset)
  * Read from /dev/audio
  * Returns audio device info (9front compatible)
  */
-ssize_t devaudio_read(char *buf, size_t count, uint64_t offset)
+ssize_t devaudio_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     SoundState *state = &g_audio_state;
     char info[256];
@@ -381,7 +381,7 @@ ssize_t devaudio_read(char *buf, size_t count, uint64_t offset)
  * Write to /dev/audioctl
  * 9front compatible control interface
  */
-ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset)
+ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     char cmd[128];
     char *p;
@@ -423,7 +423,7 @@ ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset)
  * Read from /dev/audioctl
  * Returns current audio settings (9front format)
  */
-ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset)
+ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     char status[256];
     size_t len;

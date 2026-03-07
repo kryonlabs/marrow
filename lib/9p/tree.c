@@ -305,7 +305,8 @@ P9Node *tree_create_dir(P9Node *parent, const char *name)
  * Create a file with custom operations
  */
 P9Node *tree_create_file(P9Node *parent, const char *name, void *data,
-                         P9ReadFunc read, P9WriteFunc write)
+                         ssize_t (*read)(char *, size_t, uint64_t, void *),
+                         ssize_t (*write)(const char *, size_t, uint64_t, void *))
 {
     P9Node *node;
     FileOps *ops;
@@ -355,8 +356,9 @@ struct FileOps *node_get_ops(P9Node *node)
 
 /*
  * Read from a file node
+ * UPDATED: Now accepts fid_ctx parameter for per-FID state
  */
-ssize_t node_read(P9Node *node, char *buf, size_t count, uint64_t offset)
+ssize_t node_read(P9Node *node, char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     struct FileOps *ops;
     ssize_t (*read_func)(char *, size_t, uint64_t, void *);
@@ -370,15 +372,22 @@ ssize_t node_read(P9Node *node, char *buf, size_t count, uint64_t offset)
         return -1;
     }
 
-    /* Call read function with state data */
+    /* Call read function with FID context (if provided) or node data (for backward compatibility) */
     read_func = (ssize_t (*)(char *, size_t, uint64_t, void *))ops->read;
-    return read_func(buf, count, offset, ops->data);
+
+    /* If fid_ctx is provided (streaming device), use it; otherwise use node data */
+    if (fid_ctx != NULL) {
+        return read_func(buf, count, offset, fid_ctx);
+    } else {
+        return read_func(buf, count, offset, ops->data);
+    }
 }
 
 /*
  * Write to a file node
+ * UPDATED: Now accepts fid_ctx parameter for per-FID state
  */
-ssize_t node_write(P9Node *node, const char *buf, size_t count, uint64_t offset)
+ssize_t node_write(P9Node *node, const char *buf, size_t count, uint64_t offset, void *fid_ctx)
 {
     struct FileOps *ops;
     ssize_t (*write_func)(const char *, size_t, uint64_t, void *);
@@ -392,9 +401,15 @@ ssize_t node_write(P9Node *node, const char *buf, size_t count, uint64_t offset)
         return -1;
     }
 
-    /* Call write function with state data */
+    /* Call write function with FID context (if provided) or node data (for backward compatibility) */
     write_func = (ssize_t (*)(const char *, size_t, uint64_t, void *))ops->write;
-    return write_func(buf, count, offset, ops->data);
+
+    /* If fid_ctx is provided (streaming device), use it; otherwise use node data */
+    if (fid_ctx != NULL) {
+        return write_func(buf, count, offset, fid_ctx);
+    } else {
+        return write_func(buf, count, offset, ops->data);
+    }
 }
 
 /*

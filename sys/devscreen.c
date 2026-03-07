@@ -24,6 +24,11 @@ typedef struct {
 static ScreenState *g_screen_state = NULL;
 
 /*
+ * Global reference to /dev/screen/data node for resizing
+ */
+static P9Node *g_screen_data_node = NULL;
+
+/*
  * Read from /dev/screen
  * Returns raw pixel data in RGBA32 format
  */
@@ -127,11 +132,116 @@ static ssize_t devscreen_write(const char *buf, size_t count, uint64_t offset,
 }
 
 /*
+ * Read from /dev/screen/ctl
+ * Returns screen dimensions: "WIDTHxHEIGHT\n"
+ */
+static ssize_t devscreen_ctl_read(char *buf, size_t count, uint64_t offset,
+                                  void *data)
+{
+    ScreenState *state = (ScreenState *)data;
+    char size_str[64];
+    int len;
+
+    if (state == NULL || state->screen == NULL) {
+        return 0;
+    }
+
+    /* Format: "WIDTHxHEIGHT\n" */
+    len = snprintf(size_str, sizeof(size_str), "%dx%d\n",
+                   Dx(state->screen->r), Dy(state->screen->r));
+
+    if (len < 0 || len >= (int)sizeof(size_str)) {
+        return -1;
+    }
+
+    /* Handle offset */
+    if (offset >= (uint64_t)len) {
+        return 0;  /* EOF */
+    }
+
+    /* Calculate bytes to return */
+    if (offset + count > (uint64_t)len) {
+        count = len - (size_t)offset;
+    }
+
+    memcpy(buf, size_str + offset, count);
+    return (ssize_t)count;
+}
+
+/*
+ * Write to /dev/screen/ctl
+ * Accepts commands to resize the screen: "screen WIDTHxHEIGHT\n"
+ * This allows the window manager to dynamically change the screen size.
+ */
+static ssize_t devscreen_ctl_write(const char *buf, size_t count, uint64_t offset,
+                                   void *data)
+{
+    ScreenState *state = (ScreenState *)data;
+    char cmd[64];
+    size_t cmd_len;
+    int width, height;
+    int parsed;
+    Rectangle new_rect;
+    size_t new_size;
+
+    (void)offset;  /* Write commands don't use offset */
+
+    if (state == NULL || state->screen == NULL) {
+        return -1;
+    }
+
+    if (buf == NULL || count == 0) {
+        return -1;
+    }
+
+    /* Limit command length */
+    cmd_len = (count < sizeof(cmd) - 1) ? count : sizeof(cmd) - 1;
+    memcpy(cmd, buf, cmd_len);
+    cmd[cmd_len] = '\0';
+
+    /* Parse "screen WIDTHxHEIGHT\n" format */
+    parsed = sscanf(cmd, "screen %dx%d", &width, &height);
+    if (parsed != 2) {
+        fprintf(stderr, "devscreen_ctl_write: invalid command format '%s'\n", cmd);
+        return -1;
+    }
+
+    /* Validate dimensions */
+    if (width <= 0 || height <= 0 || width > 8192 || height > 8192) {
+        fprintf(stderr, "devscreen_ctl_write: invalid dimensions %dx%d\n", width, height);
+        return -1;
+    }
+
+    fprintf(stderr, "devscreen_ctl_write: resizing screen to %dx%d\n", width, height);
+
+    /* Update screen rectangle dimensions */
+    new_rect.min.x = 0;
+    new_rect.min.y = 0;
+    new_rect.max.x = width;
+    new_rect.max.y = height;
+    state->screen->r = new_rect;
+
+    /* Update file size in /dev/screen/data node */
+    new_size = (size_t)width * (size_t)height * 4;
+    if (g_screen_data_node != NULL) {
+        g_screen_data_node->length = new_size;
+        fprintf(stderr, "devscreen_ctl_write: updated file size to %lu bytes\n",
+                (unsigned long)new_size);
+    } else {
+        fprintf(stderr, "devscreen_ctl_write: warning - no data node to update\n");
+    }
+
+    return (ssize_t)count;
+}
+
+/*
  * Initialize /dev/screen device
  */
 int devscreen_init(P9Node *dev_dir, Memimage *screen)
 {
-    P9Node *screen_node;
+    P9Node *screen_dir;
+    P9Node *data_node;
+    P9Node *ctl_node;
     ScreenState *state;
 
     if (dev_dir == NULL || screen == NULL) {
@@ -148,19 +258,43 @@ int devscreen_init(P9Node *dev_dir, Memimage *screen)
     state->screen = screen;
     g_screen_state = state;
 
-    /* Create /dev/screen file */
-    screen_node = tree_create_file(dev_dir, "screen",
-                                   state,
-                                   (P9ReadFunc)devscreen_read,
-                                   (P9WriteFunc)devscreen_write);
-    if (screen_node == NULL) {
-        fprintf(stderr, "devscreen_init: cannot create screen node\n");
+    /* Create /dev/screen directory */
+    screen_dir = tree_create_dir(dev_dir, "screen");
+    if (screen_dir == NULL) {
+        fprintf(stderr, "devscreen_init: cannot create screen directory\n");
         free(state);
         return -1;
     }
 
+    /* Create /dev/screen/data file */
+    data_node = tree_create_file(screen_dir, "data",
+                                 state,
+                                 (P9ReadFunc)devscreen_read,
+                                 (P9WriteFunc)devscreen_write);
+    if (data_node == NULL) {
+        fprintf(stderr, "devscreen_init: cannot create data node\n");
+        free(state);
+        return -1;
+    }
+
+    /* Store data node reference globally for resizing */
+    g_screen_data_node = data_node;
+
     /* Set file size */
-    screen_node->length = Dx(screen->r) * Dy(screen->r) * 4;
+    data_node->length = Dx(screen->r) * Dy(screen->r) * 4;
+
+    /* Create /dev/screen/ctl file */
+    ctl_node = tree_create_file(screen_dir, "ctl",
+                                state,
+                                (P9ReadFunc)devscreen_ctl_read,
+                                (P9WriteFunc)devscreen_ctl_write);
+    if (ctl_node == NULL) {
+        fprintf(stderr, "devscreen_init: cannot create ctl node\n");
+        free(state);
+        return -1;
+    }
+
+    fprintf(stderr, "devscreen_init: /dev/screen/data and /dev/screen/ctl ready\n");
 
     return 0;
 }
@@ -171,6 +305,17 @@ int devscreen_init(P9Node *dev_dir, Memimage *screen)
 ScreenState *devscreen_get_state(void)
 {
     return g_screen_state;
+}
+
+/*
+ * Get screen image (for devdraw and other devices)
+ */
+Memimage *devscreen_get_screen(void)
+{
+    if (g_screen_state == NULL) {
+        return NULL;
+    }
+    return g_screen_state->screen;
 }
 
 /*
