@@ -139,9 +139,6 @@ P9Fid *fid_new(uint32_t fid_num, P9Node *node)
     fid_table[free_slot].mode = 0;
     fid_table[free_slot].fid_state = NULL;  /* Initialize FID state */
 
-    fprintf(stderr, "fid_new: created FID %u for client_fd=%d in slot %d\n",
-            fid_num, current_client_fd, free_slot);
-
     return &fid_table[free_slot];
 }
 
@@ -507,7 +504,6 @@ size_t handle_topen(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
     /* Create FID state for streaming devices */
     if (node_get_path(node, path, sizeof(path)) == 0) {
         if (is_streaming_device(node)) {
-            fprintf(stderr, "handle_topen: Creating FID state for %s\n", path);
 
             fid_state = fid_state_create(fid, current_client_fd, node);
             if (fid_state == NULL) {
@@ -525,7 +521,6 @@ size_t handle_topen(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
                 }
                 fid_state_set_device(fid_state, mouse_state,
                                     (void (*)(void*))devmouse_destroy_fid_state);
-                fprintf(stderr, "handle_topen: Created mouse FID state\n");
             } else if (strcmp(path, "/dev/kbd") == 0) {
                 KbdFIDState *kbd_state = devkbd_create_fid_state();
                 if (kbd_state == NULL) {
@@ -534,7 +529,6 @@ size_t handle_topen(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf)
                 }
                 fid_state_set_device(fid_state, kbd_state,
                                     (void (*)(void*))devkbd_destroy_fid_state);
-                fprintf(stderr, "handle_topen: Created keyboard FID state\n");
             }
 
             fid_obj->fid_state = fid_state;
