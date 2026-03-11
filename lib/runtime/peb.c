@@ -7,6 +7,7 @@
  */
 
 #include "runtime/peb.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -549,45 +550,44 @@ int peb_format_regs(const PEB *peb, char *buf, size_t buf_size)
         return 0;
     }
 
-    /* Use sprintf for unsigned long long (C89 compliant) */
     /* Format each register on a separate line */
-    len = sprintf(buf,
-            "AX   %016lx\n"
-            "BX   %016lx\n"
-            "CX   %016lx\n"
-            "DX   %016lx\n"
-            "SI   %016lx\n"
-            "DI   %016lx\n"
-            "BP   %016lx\n"
-            "R8   %016lx\n"
-            "R9   %016lx\n"
-            "R10  %016lx\n"
-            "R11  %016lx\n"
-            "R12  %016lx\n"
-            "R13  %016lx\n"
-            "R14  %016lx\n"
-            "R15  %016lx\n"
-            "IP   %016lx\n"
-            "FLAGS %016lx\n"
-            "SP   %016lx\n",
-            (unsigned long)peb->regs.ax,
-            (unsigned long)peb->regs.bx,
-            (unsigned long)peb->regs.cx,
-            (unsigned long)peb->regs.dx,
-            (unsigned long)peb->regs.si,
-            (unsigned long)peb->regs.di,
-            (unsigned long)peb->regs.bp,
-            (unsigned long)peb->regs.r8,
-            (unsigned long)peb->regs.r9,
-            (unsigned long)peb->regs.r10,
-            (unsigned long)peb->regs.r11,
-            (unsigned long)peb->regs.r12,
-            (unsigned long)peb->regs.r13,
-            (unsigned long)peb->regs.r14,
-            (unsigned long)peb->regs.r15,
-            (unsigned long)peb->regs.ip,
-            (unsigned long)peb->regs.flags,
-            (unsigned long)peb->regs.sp
+    len = snprint(buf, buf_size,
+                  "AX   %016lx\n"
+                  "BX   %016lx\n"
+                  "CX   %016lx\n"
+                  "DX   %016lx\n"
+                  "SI   %016lx\n"
+                  "DI   %016lx\n"
+                  "BP   %016lx\n"
+                  "R8   %016lx\n"
+                  "R9   %016lx\n"
+                  "R10  %016lx\n"
+                  "R11  %016lx\n"
+                  "R12  %016lx\n"
+                  "R13  %016lx\n"
+                  "R14  %016lx\n"
+                  "R15   %016lx\n"
+                  "IP   %016lx\n"
+                  "FLAGS %016lx\n"
+                  "SP   %016lx\n",
+                  (unsigned long)peb->regs.ax,
+                  (unsigned long)peb->regs.bx,
+                  (unsigned long)peb->regs.cx,
+                  (unsigned long)peb->regs.dx,
+                  (unsigned long)peb->regs.si,
+                  (unsigned long)peb->regs.di,
+                  (unsigned long)peb->regs.bp,
+                  (unsigned long)peb->regs.r8,
+                  (unsigned long)peb->regs.r9,
+                  (unsigned long)peb->regs.r10,
+                  (unsigned long)peb->regs.r11,
+                  (unsigned long)peb->regs.r12,
+                  (unsigned long)peb->regs.r13,
+                  (unsigned long)peb->regs.r14,
+                  (unsigned long)peb->regs.r15,
+                  (unsigned long)peb->regs.ip,
+                  (unsigned long)peb->regs.flags,
+                  (unsigned long)peb->regs.sp
     );
 
     return len;

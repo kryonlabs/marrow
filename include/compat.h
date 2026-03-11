@@ -18,20 +18,14 @@ typedef unsigned int useconds_t;
 
 /*
  * String functions (POSIX)
+ * strdup disabled due to plan9port conflict - plan9port provides p9strdup
  */
-#ifndef HAVE_STRDUP
-extern char *strdup(const char *s);
-#endif
+/* #ifndef HAVE_STRDUP */
+/* extern char *strdup(const char *s); */
+/* #endif */
 
 #ifndef HAVE_STRDUP_R
 extern char *strtok_r(char *str, const char *delim, char **saveptr);
-#endif
-
-/*
- * Formatted output (C99, but widely available)
- */
-#ifndef HAVE_SNPRINTF
-extern int snprintf(char *str, size_t size, const char *format, ...);
 #endif
 
 /*
@@ -45,9 +39,10 @@ extern int setenv(const char *name, const char *value, int overwrite);
 extern int unsetenv(const char *name);
 #endif
 
-#ifndef HAVE_PUTENV
-extern int putenv(char *string);
-#endif
+/* putenv disabled due to plan9port conflict */
+/* #ifndef HAVE_PUTENV */
+/* extern int putenv(char *string); */
+/* #endif */
 
 /*
  * Process control (POSIX)

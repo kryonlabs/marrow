@@ -5,19 +5,34 @@
  * Based on drawterm cpu.c and 9front factotum
  */
 
-#include "auth_p9any.h"
-#include "auth_dp9ik.h"
-#include "auth_p9sk1.h"
-#include "devfactotum.h"
+/* Include system headers FIRST to avoid plan9port macro conflicts */
 #include <stdio.h>
 #include <stdlib.h>
-#include "compat.h"
 #include <string.h>
 #include <errno.h>
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <unistd.h>
+
+/* Now include plan9port headers */
+#include <lib9.h>
+
+/*
+ * CRITICAL: Undefine plan9port's rand macro.
+ * The Authenticator struct has a 'rand' field that conflicts with
+ * plan9port's #define rand p9rand. We need to access this field directly.
+ */
+#ifdef rand
+#undef rand
+#endif
+
+/* Include local headers */
+#include "auth_p9any.h"
+#include "auth_dp9ik.h"
+#include "auth_p9sk1.h"
+#include "devfactotum.h"
+#include "compat.h"
 
 static int send_line(int fd, const char *s) {
     size_t len = strlen(s);
@@ -36,38 +51,7 @@ void dump_buf(const char *msg, char *buf, int n) {
     fprintf(stderr, "]\n");
 }
 
-/* Plan 9 style malloc that zeros memory */
-static void* mallocz(size_t n, int clr)
-{
-    void *p = malloc(n);
-    if(p != NULL && clr)
-        memset(p, 0, n);
-    return p;
-}
-
-/*
- * strdup is not in C89, provide a simple implementation
- */
-static char *strdup_impl(const char *s)
-{
-    char *dup;
-    size_t len;
-
-    if (s == NULL) {
-        return NULL;
-    }
-
-    len = strlen(s) + 1;
-    dup = (char *)malloc(len);
-    if (dup == NULL) {
-        return NULL;
-    }
-
-    memcpy(dup, s, len);
-    return dup;
-}
-
-#define strdup(s) strdup_impl(s)
+/* Use plan9port's mallocz and strdup - already provided in libc.h */
 
 /*
  * Default domain for authentication
@@ -99,8 +83,8 @@ int p9any_build_server_hello(char *buf, size_t len, const char *domain)
         domain = default_domain;
     }
 
-    written = snprintf(buf, len, "p9sk1@%s dp9ik@%s",
-                       domain, domain);
+    written = snprint(buf, len, "p9sk1@%s dp9ik@%s",
+                      domain, domain);
 
     if (written < 0 || (size_t)written >= len) {
         return -1;
@@ -119,7 +103,7 @@ int p9any_send_protocols(int fd, const char *domain)
     int len;
 
     
-    len = snprintf(buf, sizeof(buf), "dp9ik@localhost p9sk1@localhost\n");
+    len = snprint(buf, sizeof(buf), "dp9ik@localhost p9sk1@localhost\n");
 
     fprintf(stderr, "p9any: sending protocol list (%d bytes): %s", len, buf);
     
@@ -142,7 +126,7 @@ int p9any_parse_choice(const char *buf, char *proto, size_t plen, char *dom, siz
         if (proto_part >= plen) return -1;
         memcpy(proto, buf, proto_part);
         proto[proto_part] = '\0';
-        strncpy(dom, sep + 1, dlen - 1);
+        strecpy(dom, dom + dlen, sep + 1);
         return 0;
     }
     return -1;
@@ -193,8 +177,7 @@ int p9any_parse_choice(const char *buf, char *proto, size_t plen, char *dom, siz
     }
 
     if (p9any_parse_choice(choice, proto, proto_len, dom, dom_len) < 0) {
-        strncpy(proto, choice, proto_len - 1);
-        proto[proto_len - 1] = '\0';
+        strecpy(proto, proto + proto_len, choice);
     }
 
     return 0;
@@ -257,10 +240,10 @@ int p9any_send_ticketreq(int fd, const char *proto, const char *dom,
         tr.type = AUTH_PAK;  /* Authenticated DH key exchange for dp9ik */
     }
 
-    strncpy(tr.authid, proto, AUTH_ANAMELEN - 1);
-    strncpy(tr.authdom, dom, AUTH_DOMLEN - 1);
-    strncpy(tr.hostid, dom, AUTH_ANAMELEN - 1);  /* Use domain as hostid for now */
-    strncpy(tr.uid, user, AUTH_ANAMELEN - 1);
+    strecpy(tr.authid, tr.authid + AUTH_ANAMELEN, proto);
+    strecpy(tr.authdom, tr.authdom + AUTH_DOMLEN, dom);
+    strecpy(tr.hostid, tr.hostid + AUTH_ANAMELEN, dom);  /* Use domain as hostid for now */
+    strecpy(tr.uid, tr.uid + AUTH_ANAMELEN, user);
     memcpy(tr.chal, chal, AUTH_CHALLEN);
 
     /* Serialize ticket request */
@@ -538,8 +521,7 @@ int p9any_parse_client_hello(const char *buf, char *ealgs, size_t ealgs_len)
         space = buf + 3;
 
         if (ealgs != NULL && ealgs_len > 0) {
-            strncpy(ealgs, space, ealgs_len - 1);
-            ealgs[ealgs_len - 1] = '\0';
+            strecpy(ealgs, ealgs + ealgs_len, space);
         }
 
         fprintf(stderr, "p9any: client hello with ealgs: %s\n", space);
@@ -942,7 +924,7 @@ int p9any_handler(int fd, const char *domain) {
     /* 3. Offer Protocols if client hasn't chosen yet */
     if (!choice || *choice == '\0') {
         /* Drawterm expects v.2 prefix and null-terminated strings */
-        len = sprintf(offer, "v.2 dp9ik@%s p9sk1@%s", domain, domain);
+        len = snprint(offer, sizeof(offer), "v.2 dp9ik@%s p9sk1@%s", domain, domain);
         offer[len++] = '\0'; /* Add null terminator explicitly */
         fprintf(stderr, "p9any: sending offer (%d bytes)\n", len);
 
@@ -965,10 +947,8 @@ int p9any_handler(int fd, const char *domain) {
     }
     
     if (p9any_parse_choice(choice, proto, sizeof(proto), dom, sizeof(dom)) < 0) {
-        strncpy(proto, choice, sizeof(proto) - 1);
-        proto[sizeof(proto)-1] = '\0';
-        strncpy(dom, domain, sizeof(dom)-1);
-        dom[sizeof(dom)-1] = '\0';
+        strecpy(proto, proto + sizeof(proto), choice);
+        strecpy(dom, dom + sizeof(dom), domain);
     }
     fprintf(stderr, "p9any: finalized choice [%s] on domain [%s]\n", proto, dom);
 

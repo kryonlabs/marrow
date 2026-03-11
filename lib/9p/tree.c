@@ -3,6 +3,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -52,10 +53,10 @@ static P9Node *node_alloc(const char *name, uint32_t mode)
         free(node);
         return NULL;
     }
-    strcpy(node->name, name);
+    memcpy(node->name, name, name_len + 1);
 
-    node->qid.type = (mode & P9_DMDIR) ? QTDIR : QTFILE;
-    node->qid.version = 0;
+    node->qid.type = (mode & DMDIR) ? QTDIR : QTFILE;
+    node->qid.vers = 0;
     node->qid.path = next_qid_path++;
 
     node->mode = mode;
@@ -80,7 +81,7 @@ int tree_init(void)
         return -1;  /* Already initialized */
     }
 
-    root_node = node_alloc("/", P9_DMDIR | 0555);
+    root_node = node_alloc("/", DMDIR | 0555);
     if (root_node == NULL) {
         return -1;
     }
@@ -287,7 +288,7 @@ P9Node *tree_create_dir(P9Node *parent, const char *name)
         parent = root_node;
     }
 
-    node = node_alloc(name, P9_DMDIR | 0555);
+    node = node_alloc(name, DMDIR | 0555);
     if (node == NULL) {
         return NULL;
     }

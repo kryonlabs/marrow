@@ -5,6 +5,7 @@
 
 #include "lib9p.h"
 #include "rc_wrapper.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -51,8 +52,7 @@ const char *rc_find_plan9(void)
     {
         const char *env_path = getenv("PLAN9");
         if (env_path != NULL && access(env_path, F_OK) == 0) {
-            strncpy(path, env_path, sizeof(path) - 1);
-            path[sizeof(path) - 1] = '\0';
+            strecpy(path, path + sizeof(path), env_path);
             fprintf(stderr, "rc_find_plan9: found via PLAN9=%s\n", path);
             return path;
         }
@@ -70,13 +70,13 @@ const char *rc_find_plan9(void)
             }
 
             /* Build full path */
-            snprintf(full_path, sizeof(full_path), "/nix/store/%s", entry->d_name);
+            snprint(full_path, sizeof(full_path), "/nix/store/%s", entry->d_name);
 
             /* Check if it contains bin/rc */
-            snprintf(path, sizeof(path), "%s/bin/rc", full_path);
+            snprint(path, sizeof(path), "%s/bin/rc", full_path);
             if (access(path, F_OK | X_OK) == 0) {
                 /* Found it - extract base path */
-                snprintf(path, sizeof(path), "%s", full_path);
+                snprint(path, sizeof(path), "%s", full_path);
                 closedir(dir);
                 fprintf(stderr, "rc_find_plan9: found in Nix store: %s\n", path);
                 return path;
@@ -96,8 +96,7 @@ const char *rc_find_plan9(void)
 
         for (i = 0; candidates[i] != NULL; i++) {
             if (access(candidates[i], F_OK) == 0) {
-                strncpy(path, candidates[i], sizeof(path) - 1);
-                path[sizeof(path) - 1] = '\0';
+                strecpy(path, path + sizeof(path), candidates[i]);
                 fprintf(stderr, "rc_find_plan9: found at %s\n", path);
                 return path;
             }
@@ -220,7 +219,7 @@ pid_t rc_start_cpu(const char *user, P9Node *mnt_term)
     state = &g_rc_states[slot];
 
     /* Build path to rc binary */
-    snprintf(rc_path, sizeof(rc_path), "%s/bin/rc", plan9);
+    snprint(rc_path, sizeof(rc_path), "%s/bin/rc", plan9);
 
     /* Create pipes */
     if (pipe(stdin_pipe) < 0) {
@@ -310,12 +309,10 @@ pid_t rc_start_cpu(const char *user, P9Node *mnt_term)
     state->stdout_fd = stdout_pipe[0];
     state->stderr_fd = stderr_pipe[0];
     state->active = 1;
-    strncpy(state->plan9_path, plan9, sizeof(state->plan9_path) - 1);
-    state->plan9_path[sizeof(state->plan9_path) - 1] = '\0';
+    strecpy(state->plan9_path, state->plan9_path + sizeof(state->plan9_path), plan9);
 
     if (user != NULL) {
-        strncpy(state->user, user, sizeof(state->user) - 1);
-        state->user[sizeof(state->user) - 1] = '\0';
+        strecpy(state->user, state->user + sizeof(state->user), user);
     }
 
     g_nrshells++;
@@ -488,8 +485,7 @@ int rc_set_env(const char *name, const char *value)
     for (i = 0; i < g_nenv; i++) {
         if (strcmp(g_env_names[i], name) == 0) {
             /* Update existing */
-            strncpy(g_env_values[i], value, RC_MAX_ENV_LEN - 1);
-            g_env_values[i][RC_MAX_ENV_LEN - 1] = '\0';
+            strecpy(g_env_values[i], g_env_values[i] + RC_MAX_ENV_LEN, value);
             return 0;
         }
     }
@@ -500,11 +496,8 @@ int rc_set_env(const char *name, const char *value)
         return -1;
     }
 
-    strncpy(g_env_names[g_nenv], name, RC_MAX_ENV_LEN - 1);
-    g_env_names[g_nenv][RC_MAX_ENV_LEN - 1] = '\0';
-
-    strncpy(g_env_values[g_nenv], value, RC_MAX_ENV_LEN - 1);
-    g_env_values[g_nenv][RC_MAX_ENV_LEN - 1] = '\0';
+    strecpy(g_env_names[g_nenv], g_env_names[g_nenv] + RC_MAX_ENV_LEN, name);
+    strecpy(g_env_values[g_nenv], g_env_values[g_nenv] + RC_MAX_ENV_LEN, value);
 
     g_nenv++;
 

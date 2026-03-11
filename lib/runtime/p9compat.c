@@ -8,6 +8,7 @@
 
 #include "runtime/syscall.h"
 #include "p9/p9compat.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

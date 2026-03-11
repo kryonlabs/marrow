@@ -6,6 +6,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -131,7 +132,7 @@ int devcons_printf(const char *fmt, ...)
     int len;
 
     va_start(args, fmt);
-    len = vsprintf(buf, fmt, args);
+    len = vsnprint(buf, sizeof(buf), fmt, args);
     va_end(args);
 
     if (len < 0 || (size_t)len >= sizeof(buf)) {

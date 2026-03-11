@@ -5,6 +5,7 @@
 
 #include "lib9p.h"
 #include "namespace.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include "compat.h"
 #include <string.h>
@@ -116,9 +117,9 @@ static void normalize_path(char *path)
 
         /* Add component */
         if (!first) {
-            strcat(result, "/");
+            seprint(result + strlen(result), result + sizeof(result), "/");
         }
-        strcat(result, token);
+        seprint(result + strlen(result), result + sizeof(result), "%s", token);
         first = 0;
 
         token = strtok_r(NULL, "/", &saveptr);
@@ -126,9 +127,9 @@ static void normalize_path(char *path)
 
     /* Copy back */
     if (result[0] == '\0') {
-        strcpy(path, "/");
+        strecpy(path, path + 1, "/");
     } else {
-        strcpy(path, result);
+        strecpy(path, path + strlen(result) + 1, result);
     }
 }
 
@@ -178,7 +179,7 @@ P9Node *namespace_create_mnt_term(P9Node *root, int client_id)
     }
 
     /* Create /mnt/term/[client_id] directory */
-    snprintf(dirname, sizeof(dirname), "%d", client_id);
+    snprint(dirname, sizeof(dirname), "%d", client_id);
     client_node = tree_create_dir(term_node, dirname);
     if (client_node == NULL) {
         fprintf(stderr, "namespace_create_mnt_term: failed to create /mnt/term/%s\n",
@@ -265,8 +266,7 @@ int namespace_bind(P9Node *root, const char *device, const char *path,
     }
 
     /* Normalize paths */
-    strncpy(normalized_path, path, sizeof(normalized_path) - 1);
-    normalized_path[sizeof(normalized_path) - 1] = '\0';
+    strecpy(normalized_path, normalized_path + sizeof(normalized_path), path);
     normalize_path(normalized_path);
 
     /* Find device node */
@@ -277,8 +277,7 @@ int namespace_bind(P9Node *root, const char *device, const char *path,
     }
 
     /* Find parent of destination path */
-    strncpy(path_copy, normalized_path, sizeof(path_copy) - 1);
-    path_copy[sizeof(path_copy) - 1] = '\0';
+    strecpy(path_copy, path_copy + sizeof(path_copy), normalized_path);
 
     slash = strrchr(path_copy, '/');
     if (slash == NULL) {
@@ -323,7 +322,7 @@ int namespace_bind(P9Node *root, const char *device, const char *path,
         fprintf(stderr, "namespace_bind: malloc name failed\n");
         return -1;
     }
-    strcpy(new_node->name, name);
+    strecpy(new_node->name, new_node->name + strlen(name) + 1, name);
 
     /* Set parent */
     new_node->parent = parent_node;
@@ -340,11 +339,8 @@ int namespace_bind(P9Node *root, const char *device, const char *path,
     bind_slot = find_free_bind();
     if (bind_slot >= 0) {
         g_binds[bind_slot].active = 1;
-        strncpy(g_binds[bind_slot].src, device, sizeof(g_binds[bind_slot].src) - 1);
-        g_binds[bind_slot].src[sizeof(g_binds[bind_slot].src) - 1] = '\0';
-        strncpy(g_binds[bind_slot].dst, normalized_path,
-                sizeof(g_binds[bind_slot].dst) - 1);
-        g_binds[bind_slot].dst[sizeof(g_binds[bind_slot].dst) - 1] = '\0';
+        strecpy(g_binds[bind_slot].src, g_binds[bind_slot].src + sizeof(g_binds[bind_slot].src), device);
+        strecpy(g_binds[bind_slot].dst, g_binds[bind_slot].dst + sizeof(g_binds[bind_slot].dst), normalized_path);
         g_binds[bind_slot].type = type;
         g_nbinds++;
     }
@@ -368,8 +364,7 @@ int namespace_unbind(const char *path)
     }
 
     /* Normalize path */
-    strncpy(normalized_path, path, sizeof(normalized_path) - 1);
-    normalized_path[sizeof(normalized_path) - 1] = '\0';
+    strecpy(normalized_path, normalized_path + sizeof(normalized_path), path);
     normalize_path(normalized_path);
 
     /* Find bind entry */
@@ -400,8 +395,7 @@ P9Node *namespace_lookup(P9Node *root, const char *path)
     }
 
     /* Normalize path */
-    strncpy(normalized_path, path, sizeof(normalized_path) - 1);
-    normalized_path[sizeof(normalized_path) - 1] = '\0';
+    strecpy(normalized_path, normalized_path + sizeof(normalized_path), path);
     normalize_path(normalized_path);
 
     /* Use tree_lookup */
@@ -472,7 +466,7 @@ int namespace_delete_mnt_term(int client_id)
     }
 
     /* Remove from parent's children */
-    snprintf(dirname, sizeof(dirname), "%d", client_id);
+    snprint(dirname, sizeof(dirname), "%d", client_id);
 
     /* TODO: Implement proper node removal */
     /* For now, just clear reference */

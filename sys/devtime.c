@@ -8,11 +8,26 @@
  */
 
 #define _POSIX_C_SOURCE 199309L  /* for struct timespec, clock_gettime */
-#include "lib9p.h"
+
+/* Include system headers FIRST to avoid plan9port macro conflicts */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+/* Now include plan9port headers */
+#include <lib9.h>
+
+/* Include local headers */
+#include "lib9p.h"
+
+/*
+ * CRITICAL: Undefine plan9port's localtime macro.
+ * This file uses POSIX localtime for time conversion.
+ */
+#ifdef localtime
+#undef localtime
+#endif
 
 /*
  * Read handler for /dev/time
@@ -23,7 +38,7 @@ static ssize_t devtime_read(char *buf, size_t count, uint64_t offset, void *fid_
     char tbuf[32];
     int len;
 
-    len = snprintf(tbuf, sizeof(tbuf), "%ld\n", (long)time(NULL));
+    len = snprint(tbuf, sizeof(tbuf), "%ld\n", (long)time(NULL));
     if (len < 0) return -1;
 
     if (offset >= (uint64_t)len) return 0;
@@ -58,7 +73,7 @@ static ssize_t devdate_read(char *buf, size_t count, uint64_t offset, void *fid_
     t = time(NULL);
     tm = localtime(&t);
     if (tm == NULL) return -1;
-    len = snprintf(tbuf, sizeof(tbuf), "%04d-%02d-%02d\n",
+    len = snprint(tbuf, sizeof(tbuf), "%04d-%02d-%02d\n",
                    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
     if (len < 0) return -1;
     if (offset >= (uint64_t)len) return 0;
@@ -78,7 +93,7 @@ static ssize_t devnsec_read(char *buf, size_t count, uint64_t offset, void *fid_
     struct timespec ts;
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    len = snprintf(tbuf, sizeof(tbuf), "%lld\n",
+    len = snprint(tbuf, sizeof(tbuf), "%lld\n",
                    (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec);
     if (len < 0) return -1;
 

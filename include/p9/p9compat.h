@@ -13,25 +13,27 @@
 
 /*
  * Plan 9 basic types (from 9front u.h)
+ * NOTE: lib9.h now defines most of these, so we only define what's missing
  */
+#ifndef uchar
 typedef unsigned char uchar;
+#endif
+#ifndef ushort
 typedef unsigned short ushort;
+#endif
+#ifndef uint
 typedef unsigned int uint;
+#endif
+#ifndef ulong
 typedef unsigned long ulong;
-typedef unsigned long long uvlong;
-typedef long long vlong;
+#endif
+/* uvlong and vlong are now defined by lib9.h */
 
 /*
  * 9front uses u64int, u32int, etc.
+ * Note: These are defined by plan9port's u.h, so we don't redefine them here
+ * to avoid type conflicts (long long vs long on different platforms)
  */
-typedef uint64_t u64int;
-typedef uint32_t u32int;
-typedef uint16_t u16int;
-typedef uint8_t u8int;
-typedef int64_t s64int;
-typedef int32_t s32int;
-typedef int16_t s16int;
-typedef int8_t s8int;
 
 /*
  * Plan 9 nil pointer
@@ -43,12 +45,16 @@ typedef int8_t s8int;
 /*
  * Plan 9 uses 'USED' to mark intentionally unused variables
  */
+#ifndef USED
 #define USED(x) _unused_##x = (x)
+#endif
 
 /*
  * Plan 9 uses 'SET' for variables that are set but not read
  */
+#ifndef SET
 #define SET(x) ((void)(&(x)))
+#endif
 
 /*
  * Error handling

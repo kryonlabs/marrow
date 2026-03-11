@@ -3,12 +3,10 @@
  * C89/C90 compliant
  */
 
-#include "lib9p.h"
-#include "cpu_server.h"
+/* Include system headers FIRST to avoid plan9port macro conflicts */
 #include <stdlib.h>
-#include "compat.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -16,6 +14,31 @@
 #include <signal.h>
 #include <errno.h>
 #include <dirent.h>
+
+/* Now include plan9port headers */
+#include <lib9.h>
+
+/*
+ * CRITICAL: Undefine plan9port's socket/process macros.
+ * This file uses POSIX socket/process functions.
+ */
+#ifdef listen
+#undef listen
+#endif
+#ifdef accept
+#undef accept
+#endif
+#ifdef wait
+#undef wait
+#endif
+#ifdef waitpid
+#undef waitpid
+#endif
+
+/* Include local headers */
+#include "lib9p.h"
+#include "cpu_server.h"
+#include "compat.h"
 
 /*
  * Global CPU server state
@@ -137,8 +160,7 @@ const char *cpu_find_plan9_path(void)
     {
         const char *env_path = getenv("PLAN9");
         if (env_path != NULL && access(env_path, F_OK) == 0) {
-            strncpy(path, env_path, sizeof(path) - 1);
-            path[sizeof(path) - 1] = '\0';
+            strecpy(path, path + sizeof(path), env_path);
             return path;
         }
     }
@@ -155,13 +177,13 @@ const char *cpu_find_plan9_path(void)
             }
 
             /* Build full path */
-            snprintf(full_path, sizeof(full_path), "/nix/store/%s", entry->d_name);
+            snprint(full_path, sizeof(full_path), "/nix/store/%s", entry->d_name);
 
             /* Check if it contains bin/rc */
-            snprintf(path, sizeof(path), "%s/bin/rc", full_path);
+            snprint(path, sizeof(path), "%s/bin/rc", full_path);
             if (access(path, F_OK | X_OK) == 0) {
                 /* Found it - extract base path */
-                snprintf(path, sizeof(path), "%s", full_path);
+                snprint(path, sizeof(path), "%s", full_path);
                 closedir(dir);
                 return path;
             }
@@ -180,8 +202,7 @@ const char *cpu_find_plan9_path(void)
 
         for (i = 0; candidates[i] != NULL; i++) {
             if (access(candidates[i], F_OK) == 0) {
-                strncpy(path, candidates[i], sizeof(path) - 1);
-                path[sizeof(path) - 1] = '\0';
+                strecpy(path, path + sizeof(path), candidates[i]);
                 return path;
             }
         }
@@ -228,7 +249,7 @@ P9Node *cpu_create_mnt_term(P9Node *root, int client_id)
     }
 
     /* Create /mnt/term/[client_id] directory */
-    snprintf(dirname, sizeof(dirname), "%d", client_id);
+    snprint(dirname, sizeof(dirname), "%d", client_id);
     term_node = tree_create_dir(term_node, dirname);
     if (term_node == NULL) {
         fprintf(stderr, "cpu_create_mnt_term: failed to create /mnt/term/%s\n",
@@ -279,7 +300,7 @@ static pid_t start_rc_shell(CPUSession *session)
     }
 
     /* Build path to rc binary */
-    snprintf(rc_path, sizeof(rc_path), "%s/bin/rc", plan9);
+    snprint(rc_path, sizeof(rc_path), "%s/bin/rc", plan9);
 
     /* Create pipes for stdin, stdout, stderr */
     if (pipe(stdin_pipe) < 0) {
@@ -400,13 +421,11 @@ int cpu_handle_new_client(int client_fd, const char *user, const char *aname)
 
     /* Copy user and aname */
     if (user != NULL) {
-        strncpy(session->user, user, sizeof(session->user) - 1);
-        session->user[sizeof(session->user) - 1] = '\0';
+        strecpy(session->user, session->user + sizeof(session->user), user);
     }
 
     if (aname != NULL) {
-        strncpy(session->aname, aname, sizeof(session->aname) - 1);
-        session->aname[sizeof(session->aname) - 1] = '\0';
+        strecpy(session->aname, session->aname + sizeof(session->aname), aname);
     }
 
     /* Create /mnt/term structure */

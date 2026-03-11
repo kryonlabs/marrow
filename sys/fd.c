@@ -7,6 +7,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include "compat.h"
 #include <string.h>
@@ -189,7 +190,7 @@ int devfd_create_fd(P9Node *fd_dir, int fd_num, int target_fd)
     g_fd_state[fd_num].in_use = 1;
 
     /* Create file node */
-    snprintf(name, sizeof(name), "%d", fd_num);
+    snprint(name, sizeof(name), "%d", fd_num);
 
     node = tree_create_file(fd_dir, name, &g_fd_state[fd_num],
                             (P9ReadFunc)devfd_read,

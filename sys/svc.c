@@ -7,6 +7,7 @@
 
 #include "libregistry.h"
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "compat.h"
@@ -45,13 +46,12 @@ static ssize_t svc_discover_read(char *buf, size_t count, uint64_t offset, void 
         /* Get all services */
         if (service_list(&services, &num_services) == 0) {
             for (i = 0; i < num_services; i++) {
-                int remaining = sizeof(discover_buf) - (p - discover_buf);
-                if (remaining > 0) {
-                    p += snprintf(p, remaining,
-                                 "%s %s %ld\n",
-                                 services[i].name,
-                                 services[i].type,
-                                 (long)services[i].registered);
+                if (p < discover_buf + sizeof(discover_buf)) {
+                    p = seprint(p, discover_buf + sizeof(discover_buf),
+                                "%s %s %ld\n",
+                                services[i].name,
+                                services[i].type,
+                                (long)services[i].registered);
                 }
 
                 /* Free service info */
@@ -85,10 +85,10 @@ static ssize_t svc_ctl_read(char *buf, size_t count, uint64_t offset, void *fid_
     size_t len;
 
     if (!buf_filled) {
-        snprintf(status_buf, sizeof(status_buf),
-                 "Service Registry: %d services registered, %d mounts active\n",
-                 g_registry.num_services,
-                 g_registry.num_mounts);
+        snprint(status_buf, sizeof(status_buf),
+               "Service Registry: %d services registered, %d mounts active\n",
+               g_registry.num_services,
+               g_registry.num_mounts);
         buf_filled = 1;
     }
 

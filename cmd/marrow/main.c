@@ -321,12 +321,14 @@ static int handle_client_request(ClientInfo *client)
     }
     */
 
-    /* Send response */
-    result = tcp_send_msg(client->fd, resp_buf, resp_len);
-    if (result < 0) {
-        fprintf(stderr, "handle_client_request: tcp_send_msg failed\n");
-        return -1;
-    }
+    /* CRITICAL FIX: Don't send here - handlers already called write_all()!
+     * The double-send was causing the connection to close immediately.
+     */
+    /* result = tcp_send_msg(client->fd, resp_buf, resp_len); */
+    /* if (result < 0) { */
+    /*     fprintf(stderr, "handle_client_request: tcp_send_msg failed\n"); */
+    /*     return -1; */
+    /* } */
 
     return 1;  /* Handled a message */
 }

@@ -22,10 +22,16 @@ BIN=bin
 LIB=$BUILD/libmarrow.a
 SERVER=$BIN/marrow
 
+# lib9 integration
+LIB9=../lib9
+LIB9_INCLUDE=$LIB9/include
+LIB9_LIB=$LIB9/liblib9.a
+
 # Source files by module (paths relative to $SRC)
-MARROW_9P=9p/protocol 9p/ops 9p/tree 9p/fid_state
+MARROW_9P=9p/handlers 9p/ops 9p/tree 9p/fid_state
 MARROW_GRAPHICS=graphics/memdraw graphics/memimage graphics/pixconv
-MARROW_AUTH=auth/ed448 auth/sha2 auth/dp9ik auth/p9any auth/session auth/factotum auth/keys auth/secstore auth/p9sk1
+MARROW_AUTH=auth/ed448 auth/sha2 auth/dp9ik auth/session auth/factotum auth/keys auth/p9sk1 auth/p9any_stub
+# Temporarily disabled: auth/p9any auth/secstore (plan9port header conflicts)
 MARROW_REGISTRY=registry/cpu registry/rcpu registry/namespace registry/service registry/discovery registry/mount
 MARROW_SYS=sys/console sys/fd sys/proc sys/env sys/svc sys/devdraw sys/devscreen sys/devmouse sys/devkbd sys/devaudio sys/devtime sys/devrendezvous sys/devdisplay
 MARROW_PLATFORM=platform/socket
@@ -46,7 +52,11 @@ OFILES=${MARROW_9P:%=$BUILD/%.$O} ${MARROW_GRAPHICS:%=$BUILD/%.$O} \
 SERVER_OFILES=${MARROW_SERVER:%=$BUILD/%.$O}
 
 # Default target
-all:V: setup $LIB $SERVER
+all:V: lib9-setup setup $LIB $SERVER
+
+# Build lib9 first
+lib9-setup:V:
+	(cd $LIB9 && mk all)
 
 # Create directories
 setup:V:
@@ -56,45 +66,45 @@ setup:V:
 	mkdir -p $BIN
 
 # Library
-$LIB: $OFILES
+$LIB: $OFILES $LIB9_LIB
 	ar rvc $target $OFILES
 
 # Server binary
-$SERVER: cmd/marrow/main.c $LIB
+$SERVER: cmd/marrow/main.c $LIB $LIB9_LIB
 	$LD $CFLAGS -DINCLUDE_CPU_SERVER -DINCLUDE_NAMESPACE \
-		-I$INCLUDE -I$SRC cmd/marrow/main.c -L$BUILD -lmarrow -o $target $LDFLAGS
+		-I$INCLUDE -I$SRC -I$LIB9_INCLUDE cmd/marrow/main.c -L$BUILD -L$LIB9 -lmarrow -l9 -o $target $LDFLAGS
 
 # Compile rules
 $BUILD/9p/%.$O: $SRC/9p/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 $BUILD/graphics/%.$O: $SRC/graphics/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 $BUILD/auth/%.$O: $SRC/auth/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 $BUILD/registry/%.$O: $SRC/registry/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 $BUILD/platform/%.$O: $SRC/platform/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 $BUILD/runtime/%.$O: $SRC/runtime/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 $BUILD/loader/%.$O: $SRC/loader/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 # Assembly compilation - .S format (GCC/as compatible, using 9c)
 $BUILD/asm/%.$O: $SRC/asm/%.S
 	$CC -c $CFLAGS $prereq -o $target
 
 $BUILD/sys/%.$O: sys/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 $BUILD/server/%.$O: $SRC/server/%.c
-	$CC $CFLAGS -I$INCLUDE -I$SRC -c $prereq -o $target
+	$CC $CFLAGS -I$INCLUDE -I$SRC -I$LIB9_INCLUDE -c $prereq -o $target
 
 # Tests
 TESTS=test_link test_loader test_loader_debug test_loader_funcs test_loader_simple \

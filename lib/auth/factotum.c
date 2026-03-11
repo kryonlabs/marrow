@@ -7,6 +7,7 @@
 
 #include "devfactotum.h"
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "compat.h"
@@ -115,15 +116,15 @@ ssize_t factotum_ctl_read(char *buf, size_t count, uint64_t offset)
 
         key = g_keys;
         while (key != NULL && key_buf_len < (int)sizeof(key_buf) - 1) {
-            len = snprintf(tmp, sizeof(tmp), "key");
+            len = snprint(tmp, sizeof(tmp), "key");
 
             /* Write public attributes */
             attr = key->attr;
             while (attr != NULL && key_buf_len < (int)sizeof(key_buf) - 1) {
-                len = snprintf(tmp, sizeof(tmp), " %s=%s",
-                               attr->name, attr->value);
+                len = snprint(tmp, sizeof(tmp), " %s=%s",
+                              attr->name, attr->value);
                 if (key_buf_len + len < (int)sizeof(key_buf)) {
-                    strcat(key_buf, tmp);
+                    seprint(key_buf + key_buf_len, key_buf + sizeof(key_buf), "%s", tmp);
                     key_buf_len += len;
                 }
                 attr = attr->next;
@@ -133,20 +134,20 @@ ssize_t factotum_ctl_read(char *buf, size_t count, uint64_t offset)
             attr = key->privattr;
             while (attr != NULL && key_buf_len < (int)sizeof(key_buf) - 1) {
                 if (strcmp(attr->name, "password") == 0) {
-                    len = snprintf(tmp, sizeof(tmp), " !%s=?", attr->name);
+                    len = snprint(tmp, sizeof(tmp), " !%s=?", attr->name);
                 } else {
-                    len = snprintf(tmp, sizeof(tmp), " !%s=%s",
-                                   attr->name, attr->value);
+                    len = snprint(tmp, sizeof(tmp), " !%s=%s",
+                                  attr->name, attr->value);
                 }
                 if (key_buf_len + len < (int)sizeof(key_buf)) {
-                    strcat(key_buf, tmp);
+                    seprint(key_buf + key_buf_len, key_buf + sizeof(key_buf), "%s", tmp);
                     key_buf_len += len;
                 }
                 attr = attr->next;
             }
 
             if (key_buf_len + 2 < (int)sizeof(key_buf)) {
-                strcat(key_buf, "\n");
+                seprint(key_buf + key_buf_len, key_buf + sizeof(key_buf), "\n");
                 key_buf_len += 1;
             }
 
@@ -197,8 +198,8 @@ ssize_t factotum_ctl_write(const char *buf, size_t count, uint64_t offset)
     }
 
     /* Log the command */
-    snprintf(log_msg, sizeof(log_msg), "[%ld] ctl: %s\n",
-             (long)time(NULL), cmd_copy);
+    snprint(log_msg, sizeof(log_msg), "[%ld] ctl: %s\n",
+            (long)time(NULL), cmd_copy);
     log_add(log_msg);
 
     /* Execute command */
@@ -275,8 +276,8 @@ ssize_t factotum_confirm_write(const char *buf, size_t count,
 
     (void)offset;
 
-    snprintf(log_msg, sizeof(log_msg), "[%ld] confirm: %.*s\n",
-             (long)time(NULL), (int)count, buf);
+    snprint(log_msg, sizeof(log_msg), "[%ld] confirm: %.*s\n",
+            (long)time(NULL), (int)count, buf);
     log_add(log_msg);
 
     return count;
@@ -307,8 +308,8 @@ ssize_t factotum_needkey_write(const char *buf, size_t count,
 
     (void)offset;
 
-    snprintf(log_msg, sizeof(log_msg), "[%ld] needkey: %.*s\n",
-             (long)time(NULL), (int)count, buf);
+    snprint(log_msg, sizeof(log_msg), "[%ld] needkey: %.*s\n",
+            (long)time(NULL), (int)count, buf);
     log_add(log_msg);
 
     return count;
@@ -339,8 +340,8 @@ ssize_t factotum_rpc_write(const char *buf, size_t count, uint64_t offset)
 
     (void)offset;
 
-    snprintf(log_msg, sizeof(log_msg), "[%ld] rpc: %.*s\n",
-             (long)time(NULL), (int)count, buf);
+    snprint(log_msg, sizeof(log_msg), "[%ld] rpc: %.*s\n",
+            (long)time(NULL), (int)count, buf);
     log_add(log_msg);
 
     return count;

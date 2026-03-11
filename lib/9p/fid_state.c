@@ -7,6 +7,7 @@
 
 #include "fid_state.h"
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -292,7 +293,7 @@ int node_get_path(P9Node *node, char *path, size_t path_size)
             return -1;
         }
 
-        strcpy(p, stack[i]->name);
+        strecpy(p, p + component_len + 1, stack[i]->name);
         p += component_len;
         len -= component_len;
     }

@@ -1,6 +1,10 @@
 #ifndef LIB9P_H
 #define LIB9P_H
 
+/* Include lib9 for 9P protocol types */
+#include <lib9.h>
+#include <fcall.h>
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -14,60 +18,7 @@ typedef long ssize_t;
 #endif
 
 /*
- * 9P2000 Message Types
- * These must match plan9port's enum values from fcall.h
- */
-typedef enum {
-    Tversion = 100,
-    Rversion = 101,
-    Tauth = 102,
-    Rauth = 103,
-    Tattach = 104,
-    Rattach = 105,
-    Terror = 106,    /* illegal */
-    Rerror = 107,
-    Tflush = 108,
-    Rflush = 109,
-    Twalk = 110,
-    Rwalk = 111,
-    Topen = 112,
-    Ropen = 113,
-    Tcreate = 114,
-    Rcreate = 115,
-    Tread = 116,
-    Rread = 117,
-    Twrite = 118,
-    Rwrite = 119,
-    Tclunk = 120,
-    Rclunk = 121,
-    Tremove = 122,
-    Rremove = 123,
-    Tstat = 124,
-    Rstat = 125,
-    Twstat = 126,
-    Rwstat = 127
-} P9MsgType;
-
-/*
- * 9P Message Header (4 + 1 + 2 = 7 bytes)
- */
-typedef struct {
-    uint32_t size;     /* Total message size including this header */
-    uint8_t  type;     /* Message type */
-    uint16_t tag;      /* Transaction ID */
-} P9Hdr;
-
-/*
- * QID - 13 byte unique identifier
- */
-typedef struct {
-    uint8_t  type;     /* Qtdir, Qtappend, etc. */
-    uint32_t version;  /* Version number for cache coherence */
-    uint64_t path;     /* Unique path identifier */
-} P9Qid;
-
-/*
- * 9P Constants
+ * 9P Constants (Marrow-specific limits)
  */
 #define P9_MAX_VERSION  32
 #define P9_MAX_MSG      8192
@@ -77,45 +28,12 @@ typedef struct {
 #define P9_MAX_STR      256
 
 /*
- * QID Types
- */
-#define QTDIR       0x80    /* Directory */
-#define QTAPPEND    0x40    /* Append only */
-#define QTEXCL      0x20    /* Exclusive use */
-#define QTMOUNT     0x10    /* Mount point */
-#define QTAUTH      0x08    /* Authentication file */
-#define QTTMP       0x04    /* Temporary */
-#define QTSYMLINK   0x02    /* Symbolic link */
-#define QTFILE      0x00    /* Plain file */
-
-/*
- * File permissions
- */
-#define P9_DMDIR    0x80000000  /* Directory */
-#define P9_DMAPPEND 0x40000000  /* Append only */
-#define P9_DMEXCL   0x20000000  /* Exclusive */
-#define P9_DMMOUNT  0x10000000  /* Mount point */
-#define P9_DMAUTH   0x08000000  /* Authentication */
-#define P9_DMTMP    0x04000000  /* Temporary */
-#define P9_DMREAD   0x4         /* Read permission */
-#define P9_DMWRITE  0x2         /* Write permission */
-#define P9_DMEXEC   0x1         /* Execute permission */
-
-/*
- * Open modes
- */
-#define P9_OREAD    0   /* Read only */
-#define P9_OWRITE   1   /* Write only */
-#define P9_ORDWR    2   /* Read and write */
-#define P9_OEXEC    3   /* Execute */
-
-/*
  * Tree node structure
  */
 #define P9NODE_DECLARED
 typedef struct P9Node {
     char            *name;
-    P9Qid           qid;
+    Qid             qid;            /* Use lib9's Qid */
     uint32_t        mode;
     uint32_t        atime;
     uint32_t        mtime;
@@ -128,93 +46,22 @@ typedef struct P9Node {
 } P9Node;
 
 /*
- * Forward declarations for authentication and FID state
+ * FID structure (Marrow-specific FID tracking)
  */
-struct AuthInfo;
-typedef struct FIDState FIDState;
-
-/*
- * FID (File ID) tracking
- */
-typedef struct {
-    uint32_t    fid;
-    P9Node      *node;
-    int client_fd;
-    int         is_open;
-    uint8_t     mode;   /* Open mode if open */
-    struct AuthInfo *auth_info;  /* Authentication info */
-    FIDState    *fid_state;  /* Per-FID state for streaming devices */
+typedef struct P9Fid {
+    uint32_t        fid;            /* FID number */
+    int             client_fd;      /* Client socket fd */
+    P9Node          *node;          /* Node this FID points to */
+    int             is_open;        /* Whether Topen was called */
+    uint8_t         mode;           /* Open mode (OREAD, OWRITE, ORDWR) */
+    void            *fid_state;     /* FIDState for streaming devices */
 } P9Fid;
 
 /*
- * Statistics structure
- */
-typedef struct {
-    uint16_t    type;
-    uint16_t    dev;
-    P9Qid       qid;
-    uint32_t    mode;
-    uint32_t    atime;
-    uint32_t    mtime;
-    uint64_t    length;
-    char        name[P9_MAX_STR];
-    char        uid[P9_MAX_STR];
-    char        gid[P9_MAX_STR];
-    char        muid[P9_MAX_STR];
-} P9Stat;
-
-/*
- * File operation handlers (UPDATED: now include fid_ctx parameter)
+ * File operation handlers (now include fid_ctx parameter)
  */
 typedef ssize_t (*P9ReadFunc)(char *buf, size_t count, uint64_t offset, void *fid_ctx);
 typedef ssize_t (*P9WriteFunc)(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
-
-/*
- * Endianness conversion (9P uses big-endian/network byte order)
- */
-uint32_t le_get32(const uint8_t *buf);
-uint64_t le_get64(const uint8_t *buf);
-uint64_t be_get64(const uint8_t *buf);  /* Big-endian 64-bit read */
-void le_put32(uint8_t *buf, uint32_t val);
-void le_put64(uint8_t *buf, uint64_t val);
-uint16_t le_get16(const uint8_t *buf);
-void le_put16(uint8_t *buf, uint16_t val);
-
-/*
- * 9P Message parsing
- */
-int p9_parse_header(const uint8_t *buf, size_t len, P9Hdr *hdr);
-int p9_parse_tversion(const uint8_t *buf, size_t len, uint32_t *msize, char *version);
-int p9_parse_tattach(const uint8_t *buf, size_t len, uint32_t *fid, uint32_t *afid, char *uname, char *aname);
-int p9_parse_tauth(const uint8_t *buf, size_t len, char *uname, char *aname);
-int p9_parse_twalk(const uint8_t *buf, size_t len, uint32_t *fid, uint32_t *newfid,
-                   char *wnames[], int *nwname);
-int p9_parse_topen(const uint8_t *buf, size_t len, uint32_t *fid, uint8_t *mode);
-int p9_parse_tread(const uint8_t *buf, size_t len, uint32_t *fid, uint64_t *offset, uint32_t *count);
-int p9_parse_twrite(const uint8_t *buf, size_t len, uint32_t *fid, uint64_t *offset, const char **data, uint32_t *count);
-int p9_parse_tclunk(const uint8_t *buf, size_t len, uint32_t *fid);
-int p9_parse_tstat(const uint8_t *buf, size_t len, uint32_t *fid);
-
-/*
- * 9P Message building
- */
-size_t p9_build_header(uint8_t *buf, P9MsgType type, uint16_t tag, size_t payload_len);
-size_t p9_build_rversion(uint8_t *buf, uint16_t tag, uint32_t msize, const char *version);
-size_t p9_build_rerror(uint8_t *buf, uint16_t tag, const char *ename);
-size_t p9_build_rauth(uint8_t *buf, uint16_t tag, P9Qid *qid);
-size_t p9_build_rattach(uint8_t *buf, uint16_t tag, P9Qid *qid);
-size_t p9_build_rwalk(uint8_t *buf, uint16_t tag, P9Qid *wqid, int nwqid);
-size_t p9_build_ropen(uint8_t *buf, uint16_t tag, P9Qid *qid, uint32_t iounit);
-size_t p9_build_rread(uint8_t *buf, uint16_t tag, const char *data, uint32_t count);
-size_t p9_build_rwrite(uint8_t *buf, uint16_t tag, uint32_t count);
-size_t p9_build_rclunk(uint8_t *buf, uint16_t tag);
-size_t p9_build_rremove(uint8_t *buf, uint16_t tag);
-size_t p9_build_rstat(uint8_t *buf, uint16_t tag, const P9Stat *stat);
-
-/*
- * Stat packing helper
- */
-size_t p9_pack_stat(uint8_t *buf, const P9Stat *stat);
 
 /*
  * Tree management
@@ -254,18 +101,18 @@ void p9_set_client_fd(int fd);
 int p9_get_client_fd(void);
 
 /*
- * 9P Operation handlers
+ * 9P Operation handlers (updated to use lib9)
  */
-size_t handle_tversion(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_tauth(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_tattach(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_twalk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_topen(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_tread(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_twrite(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_tclunk(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_tremove(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
-size_t handle_tstat(const uint8_t *in_buf, size_t in_len, uint8_t *out_buf);
+int handle_tversion(int client_fd, const Fcall *f);
+int handle_tauth(int client_fd, const Fcall *f);
+int handle_tattach(int client_fd, const Fcall *f);
+int handle_twalk(int client_fd, const Fcall *f);
+int handle_topen(int client_fd, const Fcall *f);
+int handle_tread(int client_fd, const Fcall *f);
+int handle_twrite(int client_fd, const Fcall *f);
+int handle_tclunk(int client_fd, const Fcall *f);
+int handle_tremove(int client_fd, const Fcall *f);
+int handle_tstat(int client_fd, const Fcall *f);
 
 /*
  * Main dispatcher
@@ -319,5 +166,13 @@ ssize_t devaudio_read(char *buf, size_t count, uint64_t offset, void *fid_ctx);
 ssize_t devaudio_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
 ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset, void *fid_ctx);
 ssize_t devaudioctl_write(const char *buf, size_t count, uint64_t offset, void *fid_ctx);
+
+/*
+ * Helper functions for handlers
+ */
+void handlers_set_msize(uint32_t msize);
+uint32_t handlers_get_msize(void);
+int is_streaming_device(P9Node *node);
+int node_get_path(P9Node *node, char *path, size_t path_len);
 
 #endif /* LIB9P_H */

@@ -11,6 +11,8 @@
 #define _GNU_SOURCE  /* for syscall(), usleep(), struct timespec */
 #include "runtime/syscall.h"
 #include "lib9p.h"
+#include <lib9.h>
+#include <fcall.h>
 #include "p9/p9compat.h"
 #include "namespace.h"
 #include "loader/p9exec.h"
@@ -1204,11 +1206,11 @@ int64_t p9sys_fd2path(PEB *peb, int fd, char *buf, int nbuf)
         if (fd == 0) {
             strncpy(buf, "/dev/stdin", (size_t)nbuf);
         } else if (fd == 1) {
-            strncpy(buf, "/dev/stdout", (size_t)nbuf);
+            strecpy(buf, buf + (size_t)nbuf, "/dev/stdout");
         } else if (fd == 2) {
-            strncpy(buf, "/dev/stderr", (size_t)nbuf);
+            strecpy(buf, buf + (size_t)nbuf, "/dev/stderr");
         } else {
-            snprintf(buf, (size_t)nbuf, "/dev/fd/%d", fd);
+            snprint(buf, (size_t)nbuf, "/dev/fd/%d", fd);
         }
         buf[nbuf - 1] = '\0';
         return (int64_t)strlen(buf);
@@ -1219,93 +1221,36 @@ int64_t p9sys_fd2path(PEB *peb, int fd, char *buf, int nbuf)
 }
 
 /*
- * Pack a P9Node into Plan 9 stat wire format:
- *   size[2] type[2] dev[4] qid[13] mode[4] atime[4] mtime[4]
- *   length[8] name[s] uid[s] gid[s] muid[s]
- *
- * The leading size[2] field contains the byte count of the remainder.
+ * Pack a P9Node into Plan 9 stat wire format using lib9
  * Returns total bytes written, or -1 if buf is too small.
  */
 static int64_t p9_pack_node_stat(P9Node *node, uint8_t *buf, int nbuf)
 {
-    const char *name;
-    const char *uid  = "none";
-    const char *gid  = "none";
-    const char *muid = "";
-    int namelen, uidlen, gidlen, muidlen;
-    int statlen, totallen;
-    uint8_t *p;
+    Dir dir;
+    uint size;
 
-    name    = (node->name != NULL) ? node->name : "";
-    namelen = (int)strlen(name);
-    uidlen  = (int)strlen(uid);
-    gidlen  = (int)strlen(gid);
-    muidlen = (int)strlen(muid);
+    /* Build lib9 Dir structure from P9Node */
+    memset(&dir, 0, sizeof(dir));
+    dir.type = 0;
+    dir.dev = 0;
+    dir.qid = node->qid;
+    dir.mode = node->mode;
+    dir.atime = node->atime;
+    dir.mtime = node->mtime;
+    dir.length = node->length;
+    dir.name = (node->name != NULL) ? node->name : "";
+    dir.uid = "none";
+    dir.gid = "none";
+    dir.muid = "";
 
-    /*
-     * Fixed-size stat body (excluding the leading size[2] and strings):
-     *   type[2] dev[4] qid[13] mode[4] atime[4] mtime[4] length[8] = 39 bytes
-     * String headers: 4 * 2-byte length prefix = 8 bytes
-     * Strings: namelen + uidlen + gidlen + muidlen bytes
-     */
-    statlen  = 2 + 4 + 13 + 4 + 4 + 4 + 8  /* fixed fields */
-             + 2 + namelen
-             + 2 + uidlen
-             + 2 + gidlen
-             + 2 + muidlen;
-    totallen = 2 + statlen;   /* leading size[2] + body */
-
-    if (nbuf < totallen) {
-        p9_set_errstr("stat: buffer too small");
+    /* Use lib9's convD2M to serialize */
+    size = convD2M(&dir, buf, nbuf);
+    if (size == 0) {
+        p9_set_errstr("stat: convD2M failed");
         return -1;
     }
 
-    p = buf;
-
-    /* size[2] — byte count of everything after this field */
-    le_put16(p, (uint16_t)statlen); p += 2;
-
-    /* type[2] */
-    le_put16(p, 0); p += 2;
-
-    /* dev[4] */
-    le_put32(p, 0); p += 4;
-
-    /* qid: type[1] vers[4] path[8] */
-    *p++ = node->qid.type;
-    le_put32(p, node->qid.version); p += 4;
-    le_put64(p, node->qid.path);    p += 8;
-
-    /* mode[4] */
-    le_put32(p, node->mode); p += 4;
-
-    /* atime[4] */
-    le_put32(p, node->atime); p += 4;
-
-    /* mtime[4] */
-    le_put32(p, node->mtime); p += 4;
-
-    /* length[8] */
-    le_put64(p, node->length); p += 8;
-
-    /* name[s] */
-    le_put16(p, (uint16_t)namelen); p += 2;
-    memcpy(p, name, (size_t)namelen); p += namelen;
-
-    /* uid[s] */
-    le_put16(p, (uint16_t)uidlen); p += 2;
-    memcpy(p, uid, (size_t)uidlen); p += uidlen;
-
-    /* gid[s] */
-    le_put16(p, (uint16_t)gidlen); p += 2;
-    memcpy(p, gid, (size_t)gidlen); p += gidlen;
-
-    /* muid[s] */
-    le_put16(p, (uint16_t)muidlen); p += 2;
-    memcpy(p, muid, (size_t)muidlen); p += muidlen;
-
-    (void)p; /* suppress unused warning */
-    return (int64_t)totallen;
+    return (int64_t)size;
 }
 
 /*
@@ -1315,76 +1260,37 @@ static int64_t p9_pack_node_stat(P9Node *node, uint8_t *buf, int nbuf)
  */
 static int p9_unpack_stat_to_node(const uint8_t *buf, int nbuf, P9Node *node)
 {
-    const uint8_t *p;
-    uint32_t mode, atime, mtime;
-    uint64_t length;
-    uint16_t nameLen;
-    char name[P9_MAX_STR];
+    Dir dir;
+    uint parsed;
+    char strs[2048];  /* Buffer for strings in stat */
 
-    if (nbuf < 2) {
+    /* Use lib9's convM2D to deserialize */
+    parsed = convM2D((uchar*)buf, nbuf, &dir, strs);
+    if (parsed == 0) {
         return -1;
     }
 
-    /* Skip size[2] */
-    p = buf + 2;
-
-    /* type[2] dev[4] */
-    if (p + 6 > buf + nbuf) return -1;
-    p += 6;
-
-    /* qid[13] */
-    if (p + 13 > buf + nbuf) return -1;
-    p += 13;
-
-    /* mode[4] */
-    if (p + 4 > buf + nbuf) return -1;
-    mode = le_get32(p); p += 4;
-
-    /* atime[4] */
-    if (p + 4 > buf + nbuf) return -1;
-    atime = le_get32(p); p += 4;
-
-    /* mtime[4] */
-    if (p + 4 > buf + nbuf) return -1;
-    mtime = le_get32(p); p += 4;
-
-    /* length[8] */
-    if (p + 8 > buf + nbuf) return -1;
-    length = le_get64(p); p += 8;
-
-    /* name[s] */
-    if (p + 2 > buf + nbuf) return -1;
-    nameLen = le_get16(p); p += 2;
-    if (p + nameLen > buf + nbuf) return -1;
-    if (nameLen > 0 && nameLen < P9_MAX_STR) {
-        memcpy(name, p, (size_t)nameLen);
-        name[nameLen] = '\0';
-        /* Don't rename root ("/") */
-        if (name[0] != '\0' && strcmp(name, "/") != 0 && node->parent != NULL) {
-            free(node->name);
-            node->name = (char *)malloc((size_t)nameLen + 1);
-            if (node->name != NULL) {
-                memcpy(node->name, name, (size_t)nameLen + 1);
-            }
-        }
+    /* Don't rename root ("/") */
+    if (dir.name != NULL && dir.name[0] != '\0' &&
+        strcmp(dir.name, "/") != 0 && node->parent != NULL) {
+        free(node->name);
+        node->name = strdup(dir.name);
     }
-    p += nameLen;
 
     /* Apply numeric fields if not the "don't change" sentinel */
-    if (mode != 0xFFFFFFFFU) {
-        node->mode = mode;
+    if (dir.mode != 0xFFFFFFFFU) {
+        node->mode = dir.mode;
     }
-    if (atime != 0xFFFFFFFFU) {
-        node->atime = atime;
+    if (dir.atime != 0xFFFFFFFFU) {
+        node->atime = dir.atime;
     }
-    if (mtime != 0xFFFFFFFFU) {
-        node->mtime = mtime;
+    if (dir.mtime != 0xFFFFFFFFU) {
+        node->mtime = dir.mtime;
     }
-    if (length != (uint64_t)-1LL) {
-        node->length = length;
+    if (dir.length != (uint64_t)-1LL) {
+        node->length = dir.length;
     }
 
-    (void)p;
     return 0;
 }
 
@@ -1661,7 +1567,7 @@ int64_t p9sys_chdir(PEB *peb, const char *path)
         node = tree_lookup(tree_root(), path);
     } else {
         /* Relative — resolve against current cwd */
-        snprintf(full_path, sizeof(full_path), "%s/%s", peb->cwd, path);
+        snprint(full_path, sizeof(full_path), "%s/%s", peb->cwd, path);
         node = tree_lookup(tree_root(), full_path);
         path = full_path;
     }

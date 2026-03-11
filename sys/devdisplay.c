@@ -8,6 +8,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -37,8 +38,8 @@ static ssize_t devdisplay_read(char *buf, size_t count, uint64_t offset,
     (void)offset;
     
     /* Format: "WIDTHxHEIGHT\n" */
-    len = snprintf(size_str, sizeof(size_str), "%dx%d\n",
-                   g_display_state.width, g_display_state.height);
+    len = snprint(size_str, sizeof(size_str), "%dx%d\n",
+                  g_display_state.width, g_display_state.height);
     
     if (len < 0 || len >= (int)sizeof(size_str)) {
         return -1;

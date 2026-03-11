@@ -14,6 +14,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -357,17 +358,17 @@ ssize_t devaudio_read(char *buf, size_t count, uint64_t offset, void *fid_ctx)
         return 0;  /* EOF after first read */
     }
 
-    len = snprintf(info, sizeof(info),
-                   "audio\n"
-                   "channels %d\n"
-                   "rate %d\n"
-                   "bits 16\n"
-                   "enc little-endian\n"
-                   "volume %d %d\n",
-                   state->channels,
-                   SOUND_SAMPLE_RATE,
-                   g_volume_left,
-                   g_volume_right);
+    len = snprint(info, sizeof(info),
+                  "audio\n"
+                  "channels %d\n"
+                  "rate %d\n"
+                  "bits 16\n"
+                  "enc little-endian\n"
+                  "volume %d %d\n",
+                  state->channels,
+                  SOUND_SAMPLE_RATE,
+                  g_volume_left,
+                  g_volume_right);
 
     if (len > count) {
         len = count;
@@ -430,19 +431,19 @@ ssize_t devaudioctl_read(char *buf, size_t count, uint64_t offset, void *fid_ctx
 
     (void)offset;
 
-    len = snprintf(status, sizeof(status),
-                   "audio status\n"
-                   "channels %d\n"
-                   "rate %d\n"
-                   "bits 16\n"
-                   "enc little-endian\n"
-                   "volume %d %d\n"
-                   "status %s\n",
-                   g_audio_state.channels,
-                   SOUND_SAMPLE_RATE,
-                   g_volume_left,
-                   g_volume_right,
-                   g_audio_initialized ? "on" : "off");
+    len = snprint(status, sizeof(status),
+                  "audio status\n"
+                  "channels %d\n"
+                  "rate %d\n"
+                  "bits 16\n"
+                  "enc little-endian\n"
+                  "volume %d %d\n"
+                  "status %s\n",
+                  g_audio_state.channels,
+                  SOUND_SAMPLE_RATE,
+                  g_volume_left,
+                  g_volume_right,
+                  g_audio_initialized ? "on" : "off");
 
     if (len > count) {
         len = count;

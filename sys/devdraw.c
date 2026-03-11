@@ -7,6 +7,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include "graphics.h"
 #include <stdlib.h>
 #include <string.h>
@@ -197,27 +198,83 @@ static int build_connection_info(DrawConnection *conn, char *buf, int size)
     memset(buf, 0, 144);
 
     /* String 0: image name */
-    sprintf(buf + pos, "screen"); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "screen");
+        /* Pad to 12 chars */
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 1: channel format */
-    sprintf(buf + pos, "RGBA32"); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "RGBA32");
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 2: repl flag */
-    sprintf(buf + pos, "0"); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "0");
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 3: min.x */
-    sprintf(buf + pos, "%d", conn->viewport.min.x); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->viewport.min.x);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 4: min.y */
-    sprintf(buf + pos, "%d", conn->viewport.min.y); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->viewport.min.y);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 5: max.x */
-    sprintf(buf + pos, "%d", conn->viewport.max.x); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->viewport.max.x);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 6: max.y */
-    sprintf(buf + pos, "%d", conn->viewport.max.y); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->viewport.max.y);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 7: clip.min.x */
-    sprintf(buf + pos, "%d", conn->screen->clipr.min.x); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->screen->clipr.min.x);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 8: clip.min.y */
-    sprintf(buf + pos, "%d", conn->screen->clipr.min.y); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->screen->clipr.min.y);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 9: clip.max.x */
-    sprintf(buf + pos, "%d", conn->screen->clipr.max.x); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->screen->clipr.max.x);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 10: clip.max.y */
-    sprintf(buf + pos, "%d", conn->screen->clipr.max.y); pos += 12;
+    {
+        char *p = buf + pos;
+        p = seprint(p, buf + 144, "%d", conn->screen->clipr.max.y);
+        while (p - (buf + pos) < 12) *p++ = ' ';
+        pos += 12;
+    }
     /* String 11: reserved */
     pos += 12;
 
@@ -243,42 +300,79 @@ ssize_t devdraw_new_read(char *buf, size_t count, uint64_t offset, void *data)
     memset(default_handshake, 0, 144);
     {
         int pos = 0;
+        char *p;
 
         /* Field 0: image name */
-        sprintf(default_handshake + pos, "screen"); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "screen");
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 1: channel format */
-        sprintf(default_handshake + pos, "RGBA32"); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "RGBA32");
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 2: repl flag */
-        sprintf(default_handshake + pos, "0"); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "0");
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 3: RESERVED (client expects this to be empty/0) */
-        sprintf(default_handshake + pos, "0"); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "0");
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 4: screen min.x - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->r.min.x); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->r.min.x);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 5: screen min.y - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->r.min.y); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->r.min.y);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 6: screen max.x - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->r.max.x); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->r.max.x);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 7: screen max.y - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->r.max.y); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->r.max.y);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 8: clip min.x - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->clipr.min.x); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->clipr.min.x);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 9: clip min.y - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->clipr.min.y); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->clipr.min.y);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 10: clip max.x - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->clipr.max.x); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->clipr.max.x);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
 
         /* Field 11: clip max.y - READ FROM current screen */
-        sprintf(default_handshake + pos, "%d", current_screen->clipr.max.y); pos += 12;
+        p = default_handshake + pos;
+        p = seprint(p, default_handshake + 144, "%d", current_screen->clipr.max.y);
+        while (p - (default_handshake + pos) < 12) *p++ = ' ';
+        pos += 12;
     }
 
     /* Debug: print the handshake with ACTUAL dimensions (only on first read of offset 0) */
@@ -348,7 +442,7 @@ P9Node *drawconn_create_dir(int conn_id)
     }
 
     /* Create directory name */
-    sprintf(dirname, "%d", conn_id);
+    snprint(dirname, sizeof(dirname), "%d", conn_id);
 
     /* Create directory node */
     dir_node = (P9Node *)malloc(sizeof(P9Node));
@@ -363,12 +457,12 @@ P9Node *drawconn_create_dir(int conn_id)
         free(dir_node);
         return NULL;
     }
-    strcpy(dir_node->name, dirname);
+    strecpy(dir_node->name, dir_node->name + strlen(dirname) + 1, dirname);
 
     dir_node->qid.type = QTDIR;
-    dir_node->qid.version = 0;
+    dir_node->qid.vers = 0;
     dir_node->qid.path = conn->qid_path_base;
-    dir_node->mode = P9_DMDIR | 0555;
+    dir_node->mode = DMDIR | 0555;
     dir_node->atime = (uint32_t)time(NULL);
     dir_node->mtime = dir_node->atime;
     dir_node->length = 0;
@@ -435,18 +529,18 @@ ssize_t devdraw_ctl_read(char *buf, size_t count, uint64_t offset, void *data)
     }
 
     /* Build status string */
-    len = sprintf(status,
-                  "id=%d\n"
-                  "screen_id=%d\n"
-                  "refresh=%d\n"
-                  "nimages=%d\n"
-                  "screen_rect=%d,%d-%d,%d\n",
-                  conn->id,
-                  conn->screen_id,
-                  conn->refresh_enabled,
-                  conn->nimages,
-                  conn->screen->r.min.x, conn->screen->r.min.y,
-                  conn->screen->r.max.x, conn->screen->r.max.y);
+    len = snprint(status, sizeof(status),
+                "id=%d\n"
+                "screen_id=%d\n"
+                "refresh=%d\n"
+                "nimages=%d\n"
+                "screen_rect=%d,%d-%d,%d\n",
+                conn->id,
+                conn->screen_id,
+                conn->refresh_enabled,
+                conn->nimages,
+                conn->screen->r.min.x, conn->screen->r.min.y,
+                conn->screen->r.max.x, conn->screen->r.max.y);
 
     if (len < 0 || len > sizeof(status)) {
         return -1;
@@ -614,10 +708,10 @@ static Memimage *drawconn_get_image(DrawConnection *conn, int id)
 static void parse_rectangle(const uint8_t *buf, Rectangle *r)
 {
     int minx, miny, maxx, maxy;
-    minx = (int)le_get32(buf + 0);
-    miny = (int)le_get32(buf + 4);
-    maxx = (int)le_get32(buf + 8);
-    maxy = (int)le_get32(buf + 12);
+    minx = (int)GBIT32(buf + 0);
+    miny = (int)GBIT32(buf + 4);
+    maxx = (int)GBIT32(buf + 8);
+    maxy = (int)GBIT32(buf + 12);
     r->min.x = minx;
     r->min.y = miny;
     r->max.x = maxx;
@@ -626,8 +720,8 @@ static void parse_rectangle(const uint8_t *buf, Rectangle *r)
 
 static void parse_point(const uint8_t *buf, Point *p)
 {
-    p->x = (int)le_get32(buf + 0);
-    p->y = (int)le_get32(buf + 4);
+    p->x = (int)GBIT32(buf + 0);
+    p->y = (int)GBIT32(buf + 4);
 }
 
 /* Process 'b' message - Allocate image */
@@ -645,33 +739,33 @@ static int process_b_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    id = le_get32(buf + 1);
-    screenid = le_get32(buf + 5);
+    id = GBIT32(buf + 1);
+    screenid = GBIT32(buf + 5);
     refresh = buf[9];
-    chan = le_get32(buf + 10);
+    chan = GBIT32(buf + 10);
     repl = buf[14];
 
     /* Parse rectangle R (16 bytes) */
-    minx = (int)le_get32(buf + 15);
-    miny = (int)le_get32(buf + 19);
-    maxx = (int)le_get32(buf + 23);
-    maxy = (int)le_get32(buf + 27);
+    minx = (int)GBIT32(buf + 15);
+    miny = (int)GBIT32(buf + 19);
+    maxx = (int)GBIT32(buf + 23);
+    maxy = (int)GBIT32(buf + 27);
     r.min.x = minx;
     r.min.y = miny;
     r.max.x = maxx;
     r.max.y = maxy;
 
     /* Parse clip rectangle (16 bytes) */
-    minx = (int)le_get32(buf + 31);
-    miny = (int)le_get32(buf + 35);
-    maxx = (int)le_get32(buf + 39);
-    maxy = (int)le_get32(buf + 43);
+    minx = (int)GBIT32(buf + 31);
+    miny = (int)GBIT32(buf + 35);
+    maxx = (int)GBIT32(buf + 39);
+    maxy = (int)GBIT32(buf + 43);
     clipr.min.x = minx;
     clipr.min.y = miny;
     clipr.max.x = maxx;
     clipr.max.y = maxy;
 
-    rrggbbaa = le_get32(buf + 47);
+    rrggbbaa = GBIT32(buf + 47);
 
     /* Create image */
     img = memimage_alloc(r, chan);
@@ -709,7 +803,7 @@ static int process_n_msg(DrawConnection *conn, const uint8_t *buf, size_t len, c
         return -1;
     }
 
-    id = le_get32(buf + 1);
+    id = GBIT32(buf + 1);
     n = buf[5];
 
     if (len < 6 + n) {
@@ -749,7 +843,7 @@ static int process_f_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    id = le_get32(buf + 1);
+    id = GBIT32(buf + 1);
 
     /* Cannot free screen (id 0) */
     if (id == 0) {
@@ -790,9 +884,9 @@ static int process_A_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    id = le_get32(buf + 1);
-    imageid = le_get32(buf + 5);
-    fillid = le_get32(buf + 9);
+    id = GBIT32(buf + 1);
+    imageid = GBIT32(buf + 5);
+    fillid = GBIT32(buf + 9);
     public = buf[12];
 
     fprintf(stderr, "process_A_msg: conn %d id=%lu imageid=%lu fillid=%lu public=%d\n",
@@ -826,7 +920,7 @@ static int process_c_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    dstid = le_get32(buf + 1);
+    dstid = GBIT32(buf + 1);
     repl = buf[5];
     parse_rectangle(buf + 6, &clipr);
 
@@ -856,9 +950,9 @@ static int process_d_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    dstid = le_get32(buf + 1);
-    srcid = le_get32(buf + 5);
-    maskid = le_get32(buf + 9);
+    dstid = GBIT32(buf + 1);
+    srcid = GBIT32(buf + 5);
+    maskid = GBIT32(buf + 9);
     parse_rectangle(buf + 13, &r);
     parse_point(buf + 29, &sp);
     parse_point(buf + 37, &mp);
@@ -893,12 +987,12 @@ static int process_e_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    dstid = le_get32(buf + 1);
-    srcid = le_get32(buf + 5);
+    dstid = GBIT32(buf + 1);
+    srcid = GBIT32(buf + 5);
     parse_point(buf + 9, &center);
-    a = le_get32(buf + 17);
-    b = le_get32(buf + 21);
-    thick = le_get32(buf + 25);
+    a = GBIT32(buf + 17);
+    b = GBIT32(buf + 21);
+    thick = GBIT32(buf + 25);
     parse_point(buf + 29, &sp);
 
     dst = drawconn_get_image(conn, (int)dstid);
@@ -928,13 +1022,13 @@ static int process_L_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    dstid = le_get32(buf + 1);
+    dstid = GBIT32(buf + 1);
     parse_point(buf + 5, &p0);
     parse_point(buf + 13, &p1);
-    end0 = le_get32(buf + 21);
-    end1 = le_get32(buf + 25);
-    radius = le_get32(buf + 29);
-    srcid = le_get32(buf + 33);
+    end0 = GBIT32(buf + 21);
+    end1 = GBIT32(buf + 25);
+    radius = GBIT32(buf + 29);
+    srcid = GBIT32(buf + 33);
     parse_point(buf + 37, &sp);
 
     dst = drawconn_get_image(conn, (int)dstid);
@@ -968,12 +1062,12 @@ static int process_p_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    dstid = le_get32(buf + 1);
-    n = le_get32(buf + 5);
-    end0 = le_get32(buf + 7);
-    end1 = le_get32(buf + 11);
-    radius = le_get32(buf + 15);
-    srcid = le_get32(buf + 19);
+    dstid = GBIT32(buf + 1);
+    n = GBIT32(buf + 5);
+    end0 = GBIT32(buf + 7);
+    end1 = GBIT32(buf + 11);
+    radius = GBIT32(buf + 15);
+    srcid = GBIT32(buf + 19);
     parse_point(buf + 23, &sp);
 
     expected_len = 27 + n * 8;
@@ -1001,8 +1095,8 @@ static int process_p_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
 
     /* Parse delta points */
     for (i = 1; i <= n; i++) {
-        int dx = (int)le_get32(buf + 31 + i * 8);
-        int dy = (int)le_get32(buf + 31 + i * 8 + 4);
+        int dx = (int)GBIT32(buf + 31 + i * 8);
+        int dy = (int)GBIT32(buf + 31 + i * 8 + 4);
         points[i].x = points[i-1].x + dx;
         points[i].y = points[i-1].y + dy;
     }
@@ -1027,7 +1121,7 @@ static int process_r_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    id = le_get32(buf + 1);
+    id = GBIT32(buf + 1);
     parse_rectangle(buf + 5, &r);
 
     img = drawconn_get_image(conn, (int)id);
@@ -1057,7 +1151,7 @@ static int process_y_msg(DrawConnection *conn, const uint8_t *buf, size_t len)
         return -1;
     }
 
-    id = le_get32(buf + 1);
+    id = GBIT32(buf + 1);
     parse_rectangle(buf + 5, &r);
 
     img = drawconn_get_image(conn, (int)id);
@@ -1222,7 +1316,7 @@ int process_draw_messages(DrawConnection *conn, const char *buf, size_t count,
             if (process_p_msg(conn, ubuf + pos, count - pos) < 0) {
                 return -1;
             }
-            uint16_t n = le_get32(ubuf + pos + 5);
+            uint16_t n = GBIT32(ubuf + pos + 5);
             pos += 27 + n * 8;
             break;
         }

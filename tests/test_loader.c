@@ -6,6 +6,7 @@
  */
 
 #include "../include/loader/p9exec.h"
+#include <lib9.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -200,7 +201,7 @@ int test_load_from_memory(void) {
     /* Symbol */
     *(uint64_t *)(buffer + 33) = 0x200000000;
     *(uint8_t *)(buffer + 41) = P9_SYM_TEXT;
-    strcpy((char *)(buffer + 42), "_main");
+    strecpy((char *)(buffer + 42), (char *)(buffer + 48), "_main");
 
     /* Load from memory */
     peb = p9_load_executable_from_memory(buffer, buffer_size, "memtest");

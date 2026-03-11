@@ -7,6 +7,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include "compat.h"
 #include <string.h>
@@ -88,7 +89,7 @@ static ssize_t env_write(const char *buf, size_t count, uint64_t offset,
         if (count > space_left) {
             count = space_left;
         }
-        strncat(var->value, buf, count);
+        seprint(var->value + strlen(var->value), var->value + sizeof(var->value), "%.*s", (int)count, buf);
     }
 
     return (ssize_t)count;
@@ -121,8 +122,8 @@ int devenv_init(P9Node *root)
 
     /* Create service=cpu variable (for CPU server detection) */
     var = &g_env_vars[g_nenv_vars++];
-    strcpy(var->name, "service");
-    strcpy(var->value, "cpu");
+    strecpy(var->name, var->name + sizeof(var->name), "service");
+    strecpy(var->value, var->value + sizeof(var->value), "cpu");
     var->active = 1;
 
     node = tree_create_file(env_dir, "service", var,
@@ -135,8 +136,8 @@ int devenv_init(P9Node *root)
 
     /* Create PATH variable */
     var = &g_env_vars[g_nenv_vars++];
-    strcpy(var->name, "PATH");
-    strcpy(var->value, "/bin:/usr/bin");
+    strecpy(var->name, var->name + sizeof(var->name), "PATH");
+    strecpy(var->value, var->value + sizeof(var->value), "/bin:/usr/bin");
     var->active = 1;
 
     node = tree_create_file(env_dir, "PATH", var,
@@ -149,8 +150,8 @@ int devenv_init(P9Node *root)
 
     /* Create user variable */
     var = &g_env_vars[g_nenv_vars++];
-    strcpy(var->name, "user");
-    strcpy(var->value, "none");
+    strecpy(var->name, var->name + sizeof(var->name), "user");
+    strecpy(var->value, var->value + sizeof(var->value), "none");
     var->active = 1;
 
     node = tree_create_file(env_dir, "user", var,
@@ -166,9 +167,8 @@ int devenv_init(P9Node *root)
         const char *plan9 = getenv("PLAN9");
         if (plan9 != NULL) {
             var = &g_env_vars[g_nenv_vars++];
-            strcpy(var->name, "PLAN9");
-            strncpy(var->value, plan9, sizeof(var->value) - 1);
-            var->value[sizeof(var->value) - 1] = '\0';
+            strecpy(var->name, var->name + sizeof(var->name), "PLAN9");
+            strecpy(var->value, var->value + sizeof(var->value), plan9);
             var->active = 1;
 
             node = tree_create_file(env_dir, "PLAN9", var,
@@ -206,8 +206,7 @@ int devenv_set(const char *name, const char *value)
     for (i = 0; i < MAX_ENV_VARS; i++) {
         if (g_env_vars[i].active && strcmp(g_env_vars[i].name, name) == 0) {
             /* Update existing */
-            strncpy(g_env_vars[i].value, value, sizeof(g_env_vars[i].value) - 1);
-            g_env_vars[i].value[sizeof(g_env_vars[i].value) - 1] = '\0';
+            strecpy(g_env_vars[i].value, g_env_vars[i].value + sizeof(g_env_vars[i].value), value);
 
             /* Update environment too */
             setenv(name, value, 1);
@@ -222,10 +221,8 @@ int devenv_set(const char *name, const char *value)
     }
 
     var = &g_env_vars[g_nenv_vars++];
-    strncpy(var->name, name, sizeof(var->name) - 1);
-    var->name[sizeof(var->name) - 1] = '\0';
-    strncpy(var->value, value, sizeof(var->value) - 1);
-    var->value[sizeof(var->value) - 1] = '\0';
+    strecpy(var->name, var->name + sizeof(var->name), name);
+    strecpy(var->value, var->value + sizeof(var->value), value);
     var->active = 1;
 
     /* Add to filesystem */

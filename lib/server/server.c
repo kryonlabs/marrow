@@ -15,6 +15,7 @@
 #include <sys/select.h>
 
 #include "lib9p.h"
+#include <lib9.h>
 #include "../platform/socket.h"
 #include "marrow_embed.h"
 
@@ -182,8 +183,8 @@ int marrow_server_start(MarrowInstance *instance)
     if (g_listen_fd < 0) {
         if (instance->config.log_callback) {
             char msg[128];
-            snprintf(msg, sizeof(msg), "Failed to listen on port %d",
-                     instance->config.port);
+            snprint(msg, sizeof(msg), "Failed to listen on port %d",
+                    instance->config.port);
             instance->config.log_callback(msg, MARROW_LOG_ERROR);
         }
         return -1;
@@ -200,8 +201,8 @@ int marrow_server_start(MarrowInstance *instance)
 
     if (instance->config.log_callback) {
         char msg[128];
-        snprintf(msg, sizeof(msg), "Server listening on port %d",
-                 instance->config.port);
+        snprint(msg, sizeof(msg), "Server listening on port %d",
+                instance->config.port);
         instance->config.log_callback(msg, MARROW_LOG_INFO);
     }
 

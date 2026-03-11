@@ -7,6 +7,7 @@
 
 #include "secstore.h"
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "compat.h"
@@ -285,7 +286,7 @@ static int secstore_check_password(const char *user, const char *password)
     }
 
     /* Build path to user file (local directory) */
-    snprintf(path, sizeof(path), "./adm/secstore/who/%s", user);
+    snprint(path, sizeof(path), "./adm/secstore/who/%s", user);
 
     f = fopen(path, "r");
     if (f == NULL) {
@@ -406,7 +407,7 @@ static int secstore_pak_handler(int fd, const char *user, const char *password,
         bytes_to_hex(mu, 32, mu_hex);
         bytes_to_hex(k, 32, k_hex);
 
-        written = snprintf(buf, sizeof(buf), "mu=%s\nk=%s\nS=kryon\n",
+        written = snprint(buf, sizeof(buf), "mu=%s\nk=%s\nS=kryon\n",
                           mu_hex, k_hex);
         if (written < 0 || (size_t)written >= sizeof(buf)) {
             return -1;
@@ -459,7 +460,7 @@ static int secstore_handle_get(SConn *conn, const char *filename)
     fprintf(stderr, "secstore_handle_get: filename=%s\n", filename);
 
     /* Build path to file in ./adm/secstore/store */
-    snprintf(path, sizeof(path), "./adm/secstore/store/%s", filename);
+    snprint(path, sizeof(path), "./adm/secstore/store/%s", filename);
 
     f = fopen(path, "r");
     if (f == NULL) {
@@ -475,7 +476,7 @@ static int secstore_handle_get(SConn *conn, const char *filename)
 
     {
         char size_buf[64];
-        int written = snprintf(size_buf, sizeof(size_buf), "SIZE %ld\n", file_size);
+        int written = snprint(size_buf, sizeof(size_buf), "SIZE %ld\n", file_size);
         sconn_write(conn, size_buf, strlen(size_buf));
     }
 
@@ -509,7 +510,7 @@ static int secstore_handle_put(SConn *conn, const char *filename)
     fprintf(stderr, "secstore_handle_put: filename=%s\n", filename);
 
     /* Build path to file in ./adm/secstore/store */
-    snprintf(path, sizeof(path), "./adm/secstore/store/%s", filename);
+    snprint(path, sizeof(path), "./adm/secstore/store/%s", filename);
 
     f = fopen(path, "w");
     if (f == NULL) {
@@ -744,8 +745,8 @@ int secstore_handler(int fd)
         bytes_to_hex(k, 32, k_hex);
 
         {
-            int written = snprintf(buf, sizeof(buf), "mu=%s\nk=%s\nS=kryon\n",
-                                   mu_hex, k_hex);
+            int written = snprint(buf, sizeof(buf), "mu=%s\nk=%s\nS=kryon\n",
+                                  mu_hex, k_hex);
             if (written < 0 || (size_t)written >= sizeof(buf)) {
                 fprintf(stderr, "secstore_handler: response too large\n");
                 return -1;

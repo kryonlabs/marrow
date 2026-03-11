@@ -3,12 +3,9 @@
  * C89/C90 compliant
  */
 
-#include "rcpu.h"
-#include "cpu_server.h"
-#include "devfactotum.h"
+/* Include system headers FIRST to avoid plan9port macro conflicts */
 #include <stdio.h>
 #include <stdlib.h>
-#include "compat.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -18,6 +15,35 @@
 #include <sys/time.h>
 #include <signal.h>
 #include <fcntl.h>
+
+/* Now include plan9port headers */
+#include <lib9.h>
+
+/* Include local headers */
+#include "rcpu.h"
+#include "cpu_server.h"
+#include "devfactotum.h"
+#include "compat.h"
+
+/*
+ * CRITICAL: Undefine plan9port's socket/process macros.
+ * This file uses POSIX socket/process functions.
+ */
+#ifdef listen
+#undef listen
+#endif
+#ifdef accept
+#undef accept
+#endif
+#ifdef wait
+#undef wait
+#endif
+#ifdef waitpid
+#undef waitpid
+#endif
+#ifdef putenv
+#undef putenv
+#endif
 
 /*
  * External function to get authentication session
@@ -344,8 +370,8 @@ int handle_rcpu_connection(int fd)
     fprintf(stderr, "rcpu: authenticated as %s\n", auth->ai->cuid);
 
     /* Set up environment for authenticated user */
-    snprintf(user_str, sizeof(user_str), "USER=%s",
-             auth->ai->cuid ? auth->ai->cuid : "unknown");
+    snprint(user_str, sizeof(user_str), "USER=%s",
+            auth->ai->cuid ? auth->ai->cuid : "unknown");
     putenv(user_str);
 
     /* Read the script */

@@ -4,6 +4,7 @@
  */
 
 #include "devfactotum.h"
+#include <lib9.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "compat.h"
@@ -63,7 +64,7 @@ static int parse_attr(const char *str, char **name_out, char **value_out,
         free(name);
         return -1;
     }
-    strcpy(value, equals + 1);
+    strecpy(value, value + value_len + 1, equals + 1);
 
     *name_out = name;
     *value_out = value;

@@ -8,6 +8,7 @@
  */
 
 #include "lib9p.h"
+#include <lib9.h>
 #include <stdlib.h>
 #include "compat.h"
 #include "runtime/peb.h"
@@ -49,12 +50,12 @@ static ssize_t proc_status_read(char *buf, size_t count, uint64_t offset,
     }
 
     /* Build status string */
-    snprintf(status_buf, sizeof(status_buf),
-            "Name:\t%s\n"
-            "State:\tR (running)\n"
-            "Pid:\t%d\n"
-            "PPid:\t1\n",
-            state->cmd, state->pid);
+    snprint(status_buf, sizeof(status_buf),
+           "Name:\t%s\n"
+           "State:\tR (running)\n"
+           "Pid:\t%d\n"
+           "PPid:\t1\n",
+           state->cmd, state->pid);
 
     len = strlen(status_buf);
 
@@ -184,7 +185,7 @@ int devproc_init(P9Node *root)
 
     /* Add self (current process) */
     pid = getpid();
-    snprintf(pid_str, sizeof(pid_str), "%d", (int)pid);
+    snprint(pid_str, sizeof(pid_str), "%d", (int)pid);
 
     self_dir = tree_create_dir(proc_dir, pid_str);
     if (self_dir == NULL) {
@@ -198,8 +199,7 @@ int devproc_init(P9Node *root)
         ProcState *state = &g_procs[0];
 
         state->pid = pid;
-        strncpy(state->cmd, "kryon-server", sizeof(state->cmd) - 1);
-        state->cmd[sizeof(state->cmd) - 1] = '\0';
+        strecpy(state->cmd, state->cmd + sizeof(state->cmd), "kryon-server");
         state->active = 1;
         state->peb = NULL;  /* No PEB for host processes */
         g_nprocs = 1;
@@ -271,10 +271,9 @@ int devproc_add_pid(pid_t pid, const char *cmd, PEB *peb)
     /* Initialize state */
     g_procs[slot].pid = pid;
     if (cmd != NULL) {
-        strncpy(g_procs[slot].cmd, cmd, sizeof(g_procs[slot].cmd) - 1);
-        g_procs[slot].cmd[sizeof(g_procs[slot].cmd) - 1] = '\0';
+        strecpy(g_procs[slot].cmd, g_procs[slot].cmd + sizeof(g_procs[slot].cmd), cmd);
     } else {
-        strcpy(g_procs[slot].cmd, "unknown");
+        strecpy(g_procs[slot].cmd, g_procs[slot].cmd + sizeof(g_procs[slot].cmd), "unknown");
     }
     g_procs[slot].active = 1;
     g_procs[slot].peb = peb;  /* Set PEB pointer (may be NULL) */
@@ -288,7 +287,7 @@ int devproc_add_pid(pid_t pid, const char *cmd, PEB *peb)
     }
 
     /* Create directory */
-    snprintf(pid_str, sizeof(pid_str), "%d", (int)pid);
+    snprint(pid_str, sizeof(pid_str), "%d", (int)pid);
 
     /* TODO: Create proc files for this PID */
 
