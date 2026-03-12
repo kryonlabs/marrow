@@ -162,6 +162,16 @@ typedef struct {
     /* Fork flags inherited via rfork */
     int rfork_flags;
 
+    /* Rendezvous state for RFREND */
+    uint32_t rend_tag;        /* Rendezvous tag */
+    int rend_state;           /* Rendezvous state */
+
+    /* Per-process timing data (_tos) */
+    struct {
+        uint64_t pcycles;     /* CPU cycle count */
+        uint64_t cyclefreq;   /* CPU frequency in Hz */
+    } tos;
+
     /* Attached segments (segattach/segdetach) */
     P9AttachedSeg attached_segs[P9_MAX_ATTACHED_SEGS];
 } PEB;

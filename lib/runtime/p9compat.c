@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <time.h>
 
 /*
  * Error string storage
@@ -79,4 +80,71 @@ p9_canlock(P9Lock *l)
         return 0;
     }
     return 1;
+}
+
+/*
+ * Get CPU frequency for _tos support
+ * Returns CPU frequency in Hz
+ */
+uint64_t
+p9_cpufreq(void)
+{
+    FILE *f;
+    uint64_t freq = 0;
+    char line[256];
+
+    /* Try reading from /sys/devices/system/cpu/cpu0/cpufreq/sc_cur_freq */
+    f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/sc_cur_freq", "r");
+    if (f) {
+        if (fgets(line, sizeof(line), f)) {
+            freq = (uint64_t)atoll(line) * 1000;  /* Convert kHz to Hz */
+        }
+        fclose(f);
+    }
+
+    /* Fallback: try base frequency */
+    if (freq == 0) {
+        f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/base_frequency", "r");
+        if (f) {
+            if (fgets(line, sizeof(line), f)) {
+                freq = (uint64_t)atoll(line) * 1000;  /* Convert kHz to Hz */
+            }
+            fclose(f);
+        }
+    }
+
+    /* Fallback: use CPUID to get max frequency (x86_64 only) */
+#ifdef __x86_64__
+    if (freq == 0) {
+        unsigned int eax, ebx, ecx, edx;
+        /* CPUID leaf 0x16 gives frequency info */
+        __asm__ __volatile__("cpuid"
+                             : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                             : "a"(0x16));
+        if (eax != 0) {
+            freq = ((uint64_t)ebx) * 1000000ULL;  /* Base frequency in MHz to Hz */
+        }
+    }
+#endif
+
+    /* Default: 2 GHz */
+    if (freq == 0) {
+        freq = 2000000000ULL;
+    }
+
+    return freq;
+}
+
+/*
+ * Simple random number generator for RFREND tag
+ */
+uint32_t
+p9_rand(void)
+{
+    static int seeded = 0;
+    if (!seeded) {
+        srand((unsigned int)time(NULL));
+        seeded = 1;
+    }
+    return (uint32_t)rand();
 }

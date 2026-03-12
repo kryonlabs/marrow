@@ -74,6 +74,7 @@
 #define P9_SYS_PWRITE     51      /* Pwrite */
 #define P9_SYS_TSEMACQUIRE 52     /* Acquire semaphore with timeout */
 #define P9_SYS__NSEC      53      /* Nanoseconds */
+#define P9_SYS_TOS        54      /* Get _tos pointer */
 
 /*
  * Syscall gateway API
@@ -184,6 +185,9 @@ int64_t p9sys_errstr(PEB *peb, char *buf, int len);
 
 /* Nanoseconds */
 int64_t p9sys_nsec(PEB *peb);
+
+/* _tos pointer */
+int64_t p9sys_tos(PEB *peb);
 
 /*
  * Assembly syscall gateway stub

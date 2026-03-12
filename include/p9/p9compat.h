@@ -135,6 +135,17 @@ void p9_unlock(P9Lock *l);
 int p9_canlock(P9Lock *l);
 
 /*
+ * CPU frequency for _tos support
+ * Returns CPU frequency in Hz
+ */
+uint64_t p9_cpufreq(void);
+
+/*
+ * Simple random number generator for RFREND tag
+ */
+uint32_t p9_rand(void);
+
+/*
  * String operations
  */
 #define p9_strlen strlen

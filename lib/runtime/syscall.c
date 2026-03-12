@@ -40,6 +40,7 @@
 #define P9_RFPROC   (1<<4)
 #define P9_RFMEM    (1<<5)
 #define P9_RFNOWAIT (1<<6)
+#define P9_RFREND   (1<<13) /* Rendezvous on exec */
 
 /* Rendezvous and semaphore primitives — implemented in sys/devrendezvous.c */
 extern int64_t devrendezvous_call(uint64_t tag, uint64_t val);
@@ -459,6 +460,10 @@ int64_t p9sys_gateway(PEB *peb, int syscall_num, uint64_t *args)
 
         case P9_SYS__NSEC:
             result = p9sys_nsec(peb);
+            break;
+
+        case P9_SYS_TOS:
+            result = p9sys_tos(peb);
             break;
 
         default:
@@ -1052,6 +1057,13 @@ int64_t p9sys_rfork(PEB *peb, int flags)
         return -1;
     }
 
+    /* Handle RFREND flag */
+    if (flags & P9_RFREND) {
+        /* RFREND: Create a rendezvous channel for parent-child sync */
+        peb->rend_tag = p9_rand();  /* Generate unique tag */
+        peb->rend_state = 1;  /* P9_REND_WAITING */
+    }
+
     if (flags & P9_RFPROC) {
         /* Actual fork */
         pid = fork();
@@ -1059,8 +1071,25 @@ int64_t p9sys_rfork(PEB *peb, int flags)
             p9_set_errstr("rfork: fork failed");
             return -1;
         }
-        /* Both parent and child record the flags */
+
+        if (pid == 0) {
+            /* Child process */
+            if (flags & P9_RFREND) {
+                /* Child inherits rendezvous tag */
+                peb->rend_state = 1;  /* P9_REND_WAITING */
+            }
+            peb->rfork_flags |= flags;
+            return 0;
+        }
+
+        /* Parent process */
         peb->rfork_flags |= flags;
+
+        /* If RFREND set, parent waits here until child execs */
+        if (flags & P9_RFREND) {
+            p9sys_rendezvous(peb, peb->rend_tag, 0);
+        }
+
         return (int64_t)pid;
     }
 
@@ -1828,4 +1857,19 @@ int64_t p9sys_nsec(PEB *peb)
         clock_gettime(CLOCK_MONOTONIC, &ts);
         return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
     }
+}
+
+/*
+ * Syscall: _tos
+ * Returns pointer to per-process timing data (_tos structure).
+ * The _tos structure provides high-resolution cycle counters.
+ */
+int64_t p9sys_tos(PEB *peb)
+{
+    if (peb == NULL) {
+        return -1;
+    }
+
+    /* Return pointer to per-process timing data in PEB */
+    return (int64_t)&peb->tos;
 }

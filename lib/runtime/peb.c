@@ -7,6 +7,7 @@
  */
 
 #include "runtime/peb.h"
+#include "p9/p9compat.h"
 #include <lib9.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -120,6 +121,14 @@ PEB *peb_create(void)
 
     /* Initialize rfork flags */
     peb->rfork_flags = 0;
+
+    /* Initialize rendezvous state */
+    peb->rend_tag = 0;
+    peb->rend_state = 0;
+
+    /* Initialize _tos (timing data) */
+    peb->tos.pcycles = 0;
+    peb->tos.cyclefreq = p9_cpufreq();
 
     /* Initialize attached segments */
     memset(peb->attached_segs, 0, sizeof(peb->attached_segs));
