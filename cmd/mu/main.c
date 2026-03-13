@@ -458,7 +458,7 @@ int main(int argc, char **argv)
     }
 
     /* Load default keys */
-    if (factotum_load_keys("/etc/marrow/keys") < 0) {
+    if (factotum_load_keys("/etc/mu/keys") < 0) {
         fprintf(stderr, "No keys loaded, creating default test user\n");
         /* Create default test user */
         factotum_add_key("key proto=dp9ik dom=localhost user=glenda !password=glenda");

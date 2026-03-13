@@ -152,7 +152,7 @@ int p9sk1_passtokey(const char *password, const char *username,
 
 /*
  * Find password key from the in-memory factotum key store.
- * Loaded from /etc/marrow/keys at startup via factotum_load_keys().
+ * Loaded from /etc/mu/keys at startup via factotum_load_keys().
  */
 char *p9sk1_find_password(const char *user, const char *dom)
 {

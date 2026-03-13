@@ -1,4 +1,4 @@
-# Marrow - Portable Distributed Kernel
+# Mu - Portable Microkernel
 # Plan 9 mk build file - Plan 9 Compilers Only
 
 <../mkfile.common
@@ -19,13 +19,13 @@ BUILD=build
 BIN=bin
 
 # Library target
-LIB=$BUILD/libmarrow.a
-SERVER=$BIN/marrow
+LIB=$BUILD/libmu.a
+SERVER=$BIN/mu
 
-# lib9 integration
-LIB9=../lib9
-LIB9_INCLUDE=$LIB9/include
-LIB9_LIB=$LIB9/liblib9.a
+# lib9 integration - sys toolchain builds lib9
+LIB9=../sys/src/lib/9
+LIB9_INCLUDE=../sys/include
+LIB9_LIB=$ROOT/amd64/lib/lib9.a
 
 # Source files by module (paths relative to $SRC)
 MARROW_9P=9p/handlers 9p/ops 9p/tree 9p/fid_state
@@ -52,11 +52,7 @@ OFILES=${MARROW_9P:%=$BUILD/%.$O} ${MARROW_GRAPHICS:%=$BUILD/%.$O} \
 SERVER_OFILES=${MARROW_SERVER:%=$BUILD/%.$O}
 
 # Default target
-all:V: lib9-setup setup $LIB $SERVER
-
-# Build lib9 first
-lib9-setup:V:
-	(cd $LIB9 && mk all)
+all:V: setup $LIB $SERVER
 
 # Create directories
 setup:V:
@@ -70,9 +66,9 @@ $LIB: $OFILES $LIB9_LIB
 	ar rvc $target $OFILES
 
 # Server binary
-$SERVER: cmd/marrow/main.c $LIB $LIB9_LIB
+$SERVER: cmd/mu/main.c $LIB $LIB9_LIB
 	$LD $CFLAGS -DINCLUDE_CPU_SERVER -DINCLUDE_NAMESPACE \
-		-I$INCLUDE -I$SRC -I$LIB9_INCLUDE cmd/marrow/main.c -L$BUILD -L$LIB9 -lmarrow -l9 -o $target $LDFLAGS
+		-I$INCLUDE -I$SRC -I$LIB9_INCLUDE cmd/mu/main.c -L$BUILD -L$LIB9 -lmu -l9 -o $target $LDFLAGS
 
 # Compile rules
 $BUILD/9p/%.$O: $SRC/9p/%.c
@@ -114,7 +110,7 @@ TEST_BINS=${TESTS:%=$BUILD/tests/%}
 
 $BUILD/tests/%: tests/%.c $LIB
 	mkdir -p $BUILD/tests
-	$CC $CFLAGS -I$INCLUDE -I$SRC tests/$stem.c -L$BUILD -lmarrow -o $target $LDFLAGS -lm
+	$CC $CFLAGS -I$INCLUDE -I$SRC tests/$stem.c -L$BUILD -lmu -o $target $LDFLAGS -lm
 
 test:V: $LIB ${TEST_BINS}
 	sh tests/run_tests.sh ${TEST_BINS}

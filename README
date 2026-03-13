@@ -1,12 +1,12 @@
-Marrow: Portable Distributed Kernel
+Mu: Portable Microkernel
 
 A headless 9P-compatible kernel providing authentication, service registry,
-CPU server, and graphics devices. Marrow is the substrate for distributed
+CPU server, and graphics devices. Mu is the substrate for distributed
 Plan 9 computing.
 
 OVERVIEW
 
-Marrow provides a portable 9P2000 kernel that runs on Linux:
+Mu provides a portable 9P2000 kernel that runs on Linux:
 
     9P Server           - Complete 9P2000 protocol
     Authentication      - dp9ik, p9any, p9sk1, factotum
@@ -18,7 +18,7 @@ Marrow provides a portable 9P2000 kernel that runs on Linux:
 Architecture:
 
     ┌─────────────────────────────────────────────────────┐
-    │                    Marrow Kernel                    │
+    │                      Mu Kernel                      │
     │  • 9P2000 Server  • Auth  • Registry  • CPU Server │
     │  • Graphics      • Devices  • Platform Abstraction │
     └───────────────────────┬─────────────────────────────┘
@@ -34,7 +34,7 @@ QUICK START
 Build and run:
 
     make
-    ./marrow --port 17011
+    ./mu --port 17011
 
 Connect with drawterm:
 
@@ -52,7 +52,7 @@ DOCUMENTATION
 
 See man/ directory for manual pages:
 
-    man/1               - marrow(1) command reference
+    man/1               - mu(1) command reference
     man/4               - lib9p(4), graphics library reference
 
 COMPONENTS
@@ -77,19 +77,19 @@ BUILD
 TaijiOS supports dual compiler toolchains:
 
 GCC (Linux):
-    make                - Build marrow binary with GCC
-    make clean          - Clean build artifacts
-    make run            - Build and run on port 17010
+    mk                  - Build mu binary with GCC
+    mk clean            - Clean build artifacts
+    mk run              - Build and run on port 17010
 
 Plan 9 compilers (requires plan9port):
-    make                - Build with Plan 9 compilers (auto-detected)
-    USE_GCC=1 make      - Force GCC build even if 9c available
+    mk                  - Build with Plan 9 compilers (auto-detected)
+    USE_GCC=1 mk        - Force GCC build even if 9c available
 
 The build system auto-detects available compilers. For Plan 9 builds:
 - OpenSSL → Pure C crypto primitives (SHA-256/512)
 - Assembly uses Plan 9 syntax (.s files)
 
-Binary: bin/marrow
+Binary: bin/mu
 
 CONFIGURATION
 
@@ -97,17 +97,17 @@ Command-line options:
 
     --port PORT         - TCP port for 9P server (default: 17011)
 
-Keys file: /etc/marrow/keys
+Keys file: /etc/mu/keys
 
 EXAMPLES
 
-Start marrow:
+Start mu:
 
-    ./marrow
+    ./mu
 
 Start on custom port:
 
-    ./marrow --port 17019
+    ./mu --port 17019
 
 Test 9P connection:
 

@@ -11,7 +11,7 @@
 /*
  * Convert RGB24 to RGBA32
  * RGB24 format: [R][G][B] (3 bytes per pixel)
- * RGBA32 format: [R][G][B][A] (4 bytes per pixel, SDL2 RGBA8888 format)
+ * RGBA32 format: [R][G][B][A] (4 bytes per pixel)
  */
 void convert_rgb24_to_rgba32(const unsigned char *src, unsigned char *dst, int count)
 {
@@ -39,7 +39,7 @@ void convert_rgb24_to_rgba32(const unsigned char *src, unsigned char *dst, int c
 
 /*
  * Convert RGBA32 to RGB24
- * RGBA32 format: [R][G][B][A] (4 bytes per pixel, SDL2 RGBA8888 format)
+ * RGBA32 format: [R][G][B][A] (4 bytes per pixel)
  * RGB24 format: [R][G][B] (3 bytes per pixel)
  */
 void convert_rgba32_to_rgb24(const unsigned char *src, unsigned char *dst, int count)
@@ -62,7 +62,7 @@ void convert_rgba32_to_rgb24(const unsigned char *src, unsigned char *dst, int c
 /*
  * Convert GREY8 to RGBA32
  * GREY8 format: [Y] (1 byte per pixel, Y = luminance 0-255)
- * RGBA32 format: [R][G][B][A] (4 bytes per pixel, SDL2 RGBA8888 format)
+ * RGBA32 format: [R][G][B][A] (4 bytes per pixel)
  */
 void convert_grey8_to_rgba32(const unsigned char *src, unsigned char *dst, int count)
 {
@@ -89,7 +89,7 @@ void convert_grey8_to_rgba32(const unsigned char *src, unsigned char *dst, int c
 
 /*
  * Convert RGBA32 to GREY8
- * RGBA32 format: [R][G][B][A] (4 bytes per pixel, SDL2 RGBA8888 format)
+ * RGBA32 format: [R][G][B][A] (4 bytes per pixel)
  * GREY8 format: [Y] (1 byte per pixel, Y = luminance 0-255)
  *
  * Uses ITU-R BT.601 luminance formula:

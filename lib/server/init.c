@@ -1,8 +1,8 @@
 /*
- * Marrow Embedding API - Initialization
+ * Mu Embedding API - Initialization
  * C89/C90 compliant
  *
- * Extracted from cmd/marrow/main.c initialization sequence
+ * Extracted from cmd/mu/main.c initialization sequence
  */
 
 #include <stdio.h>

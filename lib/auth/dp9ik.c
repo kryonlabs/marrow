@@ -569,7 +569,7 @@ int dp9ik_pak_shared_secret(unsigned char out[AUTH_PAKYLEN],
 
 /*
  * Find dp9ik password from the in-memory factotum key store.
- * Loaded from /etc/marrow/keys at startup via factotum_load_keys().
+ * Loaded from /etc/mu/keys at startup via factotum_load_keys().
  * Returns allocated string (caller must free) or NULL.
  */
 char *dp9ik_find_password(const char *user, const char *dom)

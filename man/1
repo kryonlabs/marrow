@@ -1,14 +1,14 @@
-.TH MARROW 1
+.TH MU 1
 .SH NAME
-marrow \- portable distributed kernel (9P server)
+mu \- portable microkernel (9P server)
 .SH SYNOPSIS
-.B marrow
+.B mu
 [
 .I --port
 .I port
 ]
 .SH DESCRIPTION
-Marrow is a headless 9P-compatible kernel providing authentication,
+Mu is a headless 9P-compatible kernel providing authentication,
 service registry, CPU server, and graphics devices.
 .PP
 Features:
@@ -37,17 +37,17 @@ TCP port for 9P server (default: 17011).
 .SH EXAMPLES
 .EX
 # Start on default port
-marrow
+mu
 
 # Start on custom port
-marrow --port 17019
+mu --port 17019
 .EE
 .SH FILES
 .TP
-.I /etc/marrow/keys
+.I /etc/mu/keys
 Factotum keys file.
 .TP
-.I /var/lib/marrow
+.I /var/lib/mu
 Runtime data directory.
 .SH SEE ALSO
 .IR 9p (1),
